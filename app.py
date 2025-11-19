@@ -19,8 +19,8 @@ st.title("📦 Sistema de Movimientos de Inventario")
 
 st.write(
     "Flujo:\n"
-    "1) Descargan la plantilla oficial desde Google Sheets (incluye hoja de productos).\n"
-    "2) Llenan la hoja **Movimientos_Inventario** en Excel/CSV.\n"
+    "1) Descarga la plantilla (incluye hoja de productos).\n"
+    "2) Llena la hoja **Movimientos_Inventario** (las dos primeras columnas quedan vacías (ID, Timestamp) en Excel/CSV.\n"
     "3) Suben el archivo.\n"
 )
 
