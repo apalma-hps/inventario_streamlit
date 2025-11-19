@@ -22,9 +22,6 @@ st.write(
     "1) Descargan la plantilla oficial desde Google Sheets (incluye hoja de productos).\n"
     "2) Llenan la hoja **Movimientos_Inventario** en Excel/CSV.\n"
     "3) Suben el archivo.\n"
-    "4) El sistema filtra solo lo que tiene cantidad.\n"
-    "5) Genera un **folio único** por carga (columna `ID`) y agrega fecha/hora.\n"
-    "6) Consolida los movimientos en un Google Sheets central mediante Apps Script."
 )
 
 # --------------------------------------------------
