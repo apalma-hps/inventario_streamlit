@@ -4,3 +4,8 @@ pytz
 requests
 openpyxl
 xlsxwriter
+gspread
+oaut2client
+numpy
+python-dateuil
+pyarrow
