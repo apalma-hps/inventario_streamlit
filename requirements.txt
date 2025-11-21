@@ -4,7 +4,3 @@ pytz
 requests
 openpyxl
 xlsxwriter
-gspread
-numpy
-python-dateuil
-pyarrow
