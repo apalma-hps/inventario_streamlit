@@ -61,6 +61,7 @@ USER_COLUMNS = [
     "Chofer",
     "Unidad",
     "Recibido",
+    "CECO_DESTINO",
 ]
 
 # --------------------------------------------------
@@ -81,6 +82,8 @@ REQUERIMIENTOS_COLUMNS = [
     "ID_REQ",
     "Fecha",
     "Hora",
+    "CECO_DESTINO",
+    "CATEGORIA",
 ]
 
 # --------------------------------------------------
@@ -259,10 +262,6 @@ def enviar_a_consolidado(df: pd.DataFrame):
 
 @st.cache_data
 def load_catalogo_productos() -> pd.DataFrame:
-    """
-    Carga la hoja 'Catalogo_Productos' desde la plantilla.
-    Solo usa la columna 'Producto' y elimina filas vacías / NaN.
-    """
     df = pd.read_excel(
         PLANTILLA_INVENTARIO_XLSX_URL,
         sheet_name="Catalogo_Productos"
@@ -273,22 +272,25 @@ def load_catalogo_productos() -> pd.DataFrame:
     if "Producto" not in df.columns:
         raise ValueError("La hoja Catalogo_Productos no contiene la columna 'Producto'.")
 
-    # Solo columna Producto
-    df = df[["Producto"]].copy()
+    # Usar columnas reales del catálogo
+    if "Categoria" in df.columns:
+        df = df[["Categoria", "Producto"]].copy()
+    else:
+        df = df[["Producto"]].copy()
+        df["Categoria"] = "Sin categoría"
 
-    # 1) Quitar NaN reales
     df = df[df["Producto"].notna()]
 
-    # 2) Normalizar texto (AQUÍ estaba el error: ahora usamos .str.strip())
     df["Producto"] = df["Producto"].astype(str).str.strip()
+    df["Categoria"] = df["Categoria"].astype(str).str.strip()
 
-    # 3) Quitar strings vacíos o "nan" como texto
     df = df[
         (df["Producto"] != "") &
         (df["Producto"].str.lower() != "nan")
     ].reset_index(drop=True)
 
     return df
+
 
 @st.cache_data
 def load_requerimientos_from_gsheet() -> pd.DataFrame:
@@ -577,12 +579,13 @@ elif vista == "📨 Requerimientos de producto":
     try:
         productos_df = load_catalogo_productos()
         st.success(
-            "Catálogo de productos cargado desde la plantilla de inventario "
-            "(hoja Catalogo_Productos)."
+           "Catálogo de productos"
+            " cargado exitosamente."
         )
 
-        with st.expander("Ver catálogo completo de productos"):
-            st.dataframe(productos_df, use_container_width=True)
+        # Ya no mostramos el catálogo completo
+        # with st.expander("Ver catálogo completo de productos"):
+        #     st.dataframe(productos_df, use_container_width=True)
 
     except Exception as e:
         st.error(
@@ -592,35 +595,62 @@ elif vista == "📨 Requerimientos de producto":
         st.exception(e)
         st.stop()
 
-    productos_unicos = sorted(
-        productos_df["Producto"].dropna().astype(str).unique().tolist()
-    )
-    OPCION_OTRO = "Otro producto (no está en el catálogo)"
-    opciones_productos = ["--- Selecciona un producto ---"] + productos_unicos + [OPCION_OTRO]
-
     # ---------- 2) Formulario de captura (cabecera + línea de producto) ----------
     st.subheader("📝 Crear nuevo requerimiento (carrito de productos)")
 
-    with st.form("form_requerimiento"):
+    # Usamos un container en vez de st.form para que los filtros sean reactivos
+    with st.container():
         col1, col2 = st.columns(2)
 
-        usuario = col1.text_input("Usuario solicitante")
-        ceco_destino = col1.text_input("CECO destino")
-        proveedor = col1.text_input("Proveedor")
+        # CECO destino como lista fija
+        opciones_ceco = [
+            "Flautas Lamartine",
+            "Burritos Masaryk",
+            "Burritos Miyana",
+            "Comisariato",
+            "Waldos & Crispier",
+            "Eventos",
+        ]
+        ceco_destino = col1.selectbox("CECO destino", opciones_ceco)
 
         fecha_requerida = col2.date_input(
             "Fecha requerida (fecha de entrega)",
             value=date.today()
         )
-        prioridad = col2.selectbox(
-            "Prioridad",
-            options=["Media", "Alta", "Baja"],
-            index=0
-        )
 
         st.markdown("### Producto a agregar al requerimiento")
 
-        producto_sel = st.selectbox("Producto", opciones_productos)
+        # --- Categoría (reactiva) ---
+        categorias_unicas = sorted(
+            productos_df["Categoria"].dropna().astype(str).unique().tolist()
+        )
+
+        OPCION_TODAS = "--- Todas las categorías ---"
+        categoria_sel = st.selectbox(
+            "Categoría de producto",
+            [OPCION_TODAS] + categorias_unicas,
+            key="categoria_producto"
+        )
+
+        if categoria_sel == OPCION_TODAS:
+            df_filtrado_cat = productos_df.copy()
+        else:
+            df_filtrado_cat = productos_df[
+                productos_df["Categoria"] == categoria_sel
+            ].copy()
+
+        productos_unicos = sorted(
+            df_filtrado_cat["Producto"].dropna().astype(str).unique().tolist()
+        )
+
+        OPCION_OTRO = "Otro producto (no está en el catálogo)"
+        opciones_productos = ["--- Selecciona un producto ---"] + productos_unicos + [OPCION_OTRO]
+
+        producto_sel = st.selectbox(
+            "Producto",
+            opciones_productos,
+            key="producto_sel"
+        )
 
         es_nuevo = False
         producto_final = None
@@ -646,9 +676,10 @@ elif vista == "📨 Requerimientos de producto":
         factura = st.text_input("Factura (si aplica, para este producto)")
         observaciones = st.text_area("Observaciones (para este producto)")
 
-        colb1, colb2 = st.columns(2)
-        add_line = colb1.form_submit_button("➕ Agregar producto al requerimiento")
-        send_req = colb2.form_submit_button("✅ Confirmar y enviar requerimiento")
+        colb1, _ = st.columns(2)
+        add_line = colb1.button("➕ Agregar producto al requerimiento", key="btn_add_line")
+        # El botón de enviar lo movemos abajo, junto al de vaciar carrito
+        send_req = False  # lo definimos aquí para tenerlo siempre declarado
 
     # ---------- 2.a) Manejar botón: Agregar producto al carrito ----------
     if add_line:
@@ -663,9 +694,27 @@ elif vista == "📨 Requerimientos de producto":
             for e in errores:
                 st.write("-", e)
         else:
-            # si es nuevo y tiene nombre, mandamos al catálogo (opcional)
-            if es_nuevo and producto_final:
-                enviar_nuevo_producto_a_catalogo(producto_final)
+            # Determinar categoría del producto
+            if es_nuevo:
+                if categoria_sel != OPCION_TODAS:
+                    categoria_item = categoria_sel
+                else:
+                    categoria_item = "Sin categoría"
+                if producto_final:
+                    enviar_nuevo_producto_a_catalogo(producto_final)
+            else:
+                mask = (
+                        productos_df["Producto"]
+                        .astype(str)
+                        .str.strip()
+                        == str(producto_final).strip()
+                )
+                if mask.any():
+                    categoria_item = productos_df.loc[mask, "Categoria"].iloc[0]
+                else:
+                    categoria_item = (
+                        categoria_sel if categoria_sel != OPCION_TODAS else "Sin categoría"
+                    )
 
             item = {
                 "INSUMO": producto_final,
@@ -673,63 +722,99 @@ elif vista == "📨 Requerimientos de producto":
                 "CANTIDAD": cantidad,
                 "Factura": factura,
                 "Observaciones": observaciones,
+                "Categoria": categoria_item,  # 👈 interno en el carrito
             }
             st.session_state["carrito_req"].append(item)
-            st.success(f"Producto agregado al requerimiento: {producto_final} (Cantidad: {cantidad})")
-
+            st.success(
+                f"Producto agregado al requerimiento: {producto_final} "
+                f"(Cantidad: {cantidad}, Categoría: {categoria_item})"
+            )
     # ---------- Vista del carrito actual ----------
     if st.session_state["carrito_req"]:
         st.markdown("### 🛒 Carrito de productos del requerimiento actual")
-        carrito_df = pd.DataFrame(st.session_state["carrito_req"])
-        st.dataframe(carrito_df, use_container_width=True)
 
-        if st.button("🗑️ Vaciar carrito"):
+        carrito_df = pd.DataFrame(st.session_state["carrito_req"])
+
+        if "Categoria" in carrito_df.columns:
+            # Ordenamos por categoría para que se vea agrupado
+            categorias_orden = (
+                carrito_df["Categoria"]
+                .fillna("Sin categoría")
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+
+            for cat in categorias_orden:
+                subset = carrito_df[carrito_df["Categoria"] == cat]
+                st.markdown(f"#### 📂 {cat}")
+                st.dataframe(
+                    subset.drop(columns=["Categoria"]),
+                    use_container_width=True,
+                )
+        else:
+            st.dataframe(carrito_df, use_container_width=True)
+
+        colc1, colc2 = st.columns(2)
+        vaciar = colc1.button("🗑️ Vaciar carrito")
+        send_req = colc2.button("✅ Confirmar y enviar requerimiento", key="btn_send_req")
+
+        if vaciar:
             st.session_state["carrito_req"] = []
             st.info("Carrito vaciado.")
 
-    # ---------- 2.b) Manejar botón: Confirmar y enviar requerimiento ----------
-    if send_req:
-        errores = []
-        if not usuario:
-            errores.append("Debes capturar el *Usuario solicitante*.")
-        if not ceco_destino:
-            errores.append("Debes capturar el *CECO destino*.")
-        if not proveedor:
-            errores.append("Debes capturar el *Proveedor*.")
-        if not st.session_state["carrito_req"]:
-            errores.append("El carrito está vacío. Agrega al menos un producto.")
+        # ---------- Confirmar y enviar requerimiento ----------
+        if send_req:
+            errores = []
+            if not ceco_destino:
+                errores.append("Debes seleccionar el *CECO destino*.")
+            if not st.session_state["carrito_req"]:
+                errores.append("El carrito está vacío. Agrega al menos un producto.")
 
-        if errores:
-            st.error("No se pudo enviar el requerimiento:")
-            for e in errores:
-                st.write("-", e)
-        else:
-            folio_req, fecha_creacion, hora_creacion = generar_folio_requerimiento()
-            st.info(f"Folio de requerimiento generado: **{folio_req}**")
+            if errores:
+                st.error("No se pudo enviar el requerimiento:")
+                for e in errores:
+                    st.write("-", e)
+            else:
+                folio_req, fecha_creacion, hora_creacion = generar_folio_requerimiento()
+                st.info(f"Folio de requerimiento generado: **{folio_req}**")
 
-            lista_req_data = []
-            for item in st.session_state["carrito_req"]:
-                req_data = {
-                    "FECHA DE PEDIDO": fecha_creacion,
-                    "PROVEDOR": proveedor,
-                    "INSUMO": item["INSUMO"],
-                    "UNIDAD DE MEDIDA": item["UNIDAD DE MEDIDA"],
-                    "CANTIDAD": item["CANTIDAD"],
-                    "COSTO UNIDAD": "",
-                    "COSTO TOTAL": "",
-                    "FECHA DE ENTREGA": fecha_requerida.isoformat(),
-                    "Factura": item["Factura"],
-                    "Observaciones": item["Observaciones"],
-                    "Estatus": "Pendiente",
-                    "ID_REQ": folio_req,
-                    "Fecha": fecha_creacion,
-                    "Hora": hora_creacion,
-                }
-                lista_req_data.append(req_data)
+                lista_req_data = []
+                proveedor = ""  # de momento vacío
 
-            enviar_requerimientos_a_gsheet(lista_req_data)
-            # si todo va bien, vaciamos el carrito
-            st.session_state["carrito_req"] = []
+                for item in st.session_state["carrito_req"]:
+                    req_data = {
+                        "FECHA DE PEDIDO": fecha_creacion,
+                        "PROVEDOR": proveedor,
+                        "INSUMO": item["INSUMO"],
+                        "UNIDAD DE MEDIDA": item["UNIDAD DE MEDIDA"],
+                        "CANTIDAD": item["CANTIDAD"],
+                        "COSTO UNIDAD": "",
+                        "COSTO TOTAL": "",
+                        "FECHA DE ENTREGA": fecha_requerida.isoformat(),
+                        "Factura": item["Factura"],
+                        "Observaciones": item["Observaciones"],
+                        "Estatus": "Pendiente",
+                        "ID_REQ": folio_req,
+                        "Fecha": fecha_creacion,
+                        "Hora": hora_creacion,
+                        "CECO_DESTINO": ceco_destino,
+                        "CATEGORIA": item.get("Categoria", "Sin categoría"),  # 👈 clave igual que en la hoja
+                    }
+                    lista_req_data.append(req_data)
+
+                # Opcional pero recomendable: ordenar por categoría y producto
+                lista_req_data = sorted(
+                    lista_req_data,
+                    key=lambda x: (x.get("CATEGORIA", ""), x.get("INSUMO", ""))
+                )
+
+                enviar_requerimientos_a_gsheet(lista_req_data)
+                st.session_state["carrito_req"] = []
+
+    else:
+        # Si no hay carrito, no mostramos botones
+        send_req = False
 
     # ---------- 3) Consulta de estatus de requerimientos ----------
     st.subheader("🔍 Consultar estatus de requerimientos")
