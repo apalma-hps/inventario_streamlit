@@ -1,5 +1,38 @@
+# Entorno virtual
 .venv/
+venv/
+
+# Cache de Python
 __pycache__/
-.streamlit/secrets.toml
 *.pyc
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/
+
+# Archivos ocultos de macOS
 .DS_Store
+
+# Archivos temporales
+*.tmp
+*.log
+
+# Archivos de Excel / datos cargados por usuarios
+*.xlsx
+*.xls
+*.csv
+
+# Archivos de credenciales (por si usas APIs de Google)
+client_secret.json
+credentials.json
+service_account.json
+
+# Carpetas de VSCode o PyCharm
+.vscode/
+.idea/
+
+# Archivos de Jupyter (por si en algún momento usas notebooks)
+.ipynb_checkpoints/
+
+# Archivos generados por xlsxwriter
+*.xlsx.tmp
