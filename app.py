@@ -6,26 +6,139 @@ import pytz
 import os
 import requests
 
+
+LOGO_URL = "https://raw.githubusercontent.com/apalma-hps/inventario_streamlit/c773df92eb1036c7f4d9446462f3b8472b4eee29/20250625_1445_Neon%20Diner%20Night_remix_01jymd8rw4fed8atev6x9n3757.png"
+
+
 # --------------------------------------------------
 # Configuración básica de la página
 # --------------------------------------------------
 st.set_page_config(
     page_title="Inventario – Movimientos",
-    page_icon="📦",
+    page_icon=LOGO_URL,   # ahora usa tu logo real
     layout="wide"
 )
+# --------------------------------------------------
+# THEME VISUAL A PARTIR DE LA IMAGEN DEL LOGO
+# --------------------------------------------------
+st.markdown("""
+<style>
 
-st.title("📦 Sistema de Movimientos de Inventario")
+    /* Fondo general */
+    .stApp {
+        background-color: #060708 !important;
+        color: #F4D38C !important;
+    }
 
-st.write(
-    "Flujo:\n"
-    "1) Descargan la plantilla oficial desde Google Sheets (incluye hoja de productos).\n"
-    "2) Llenan la hoja **Movimientos_Inventario** en Excel/CSV.\n"
-    "3) Suben el archivo.\n"
-    "4) El sistema filtra solo lo que tiene cantidad.\n"
-    "5) Genera un **folio único** por carga (columna `ID`) y agrega fecha/hora.\n"
-    "6) Consolida los movimientos en un Google Sheets central mediante Apps Script.\n"
-    "7) Permite generar y consultar requerimientos de producto."
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #0B0C0D !important;
+        border-right: 1px solid #1d1d1d !important;
+    }
+
+    /* Títulos */
+    h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
+        color: #E03A2A !important;  /* rojo Hungry */
+        font-weight: 700 !important;
+    }
+
+    /* Subtítulos */
+    h4, h5 {
+        color: #F4D38C !important;
+    }
+
+    /* Enlaces */
+    a {
+        color: #47FF8A !important;  /* verde neón */
+        text-decoration: none !important;
+    }
+    a:hover {
+        color: #74FFAF !important;
+        text-decoration: underline !important;
+    }
+
+    /* Botones */
+    button[kind="primary"] {
+        background-color: #E03A2A !important;
+        color: white !important;
+        border-radius: 8px !important;
+        border: none !important;
+    }
+    button[kind="primary"]:hover {
+        background-color: #FF3B30 !important;
+    }
+
+    /* Inputs */
+    .stTextInput > div > input,
+    .stNumberInput input,
+    textarea,
+    select {
+        background-color: #0F1011 !important;
+        color: #F4D38C !important;
+        border: 1px solid #E03A2A55 !important;
+        border-radius: 6px !important;
+    }
+
+    /* Tablas */
+    .dataframe {
+        background-color: #0F1011 !important;
+        color: #F4D38C !important;
+        border-radius: 8px !important;
+    }
+
+    /* widgets internos */
+    div[data-baseweb="select"] > div {
+        background-color: #0F1011 !important;
+        color: #F4D38C !important;
+    }
+
+    /* Mensajes success / error / warning */
+    .stSuccess {
+        background-color: #113d23 !important;
+        color: #47FF8A !important;
+        border-left: 4px solid #47FF8A !important;
+    }
+    .stError {
+        background-color: #3d1111 !important;
+        color: #FF3B30 !important;
+        border-left: 4px solid #FF3B30 !important;
+    }
+    .stWarning {
+        background-color: #3d2d11 !important;
+        color: #F4D38C !important;
+        border-left: 4px solid #F4D38C !important;
+    }
+
+</style>
+""", unsafe_allow_html=True)
+
+
+# --------------------------------------------------
+# Encabezado con logo desde Google Drive
+# --------------------------------------------------
+
+st.markdown(
+    f"""
+    <div style="display:flex; align-items:center; gap:20px; margin-top:10px; margin-bottom:25px;">
+        <img src="{LOGO_URL}" 
+             style="
+                width:120px; 
+                height:120px; 
+                object-fit:cover; 
+                border-radius:50%; 
+                box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+             "/>
+        <h1 style="
+            font-size: 2.1rem; 
+            font-weight:700; 
+            margin:0; 
+            padding:0;
+        ">
+            Sistema de Gestión de Inventario y Requerimientos
+        </h1>
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 
 # --------------------------------------------------
@@ -72,19 +185,20 @@ REQUERIMIENTOS_COLUMNS = [
     "PROVEDOR",
     "INSUMO",
     "UNIDAD DE MEDIDA",
-    "CANTIDAD",
     "COSTO UNIDAD",
+    "CANTIDAD",
     "COSTO TOTAL",
-    "FECHA DE ENTREGA",
-    "Factura",
-    "Observaciones",
-    "Estatus",
+    "FECHA DE RECEPCIÓN",
+    "FACTURA",
+    "OBSERVACIONES",
+    "ESTATUS",
     "ID_REQ",
     "Fecha",
     "Hora",
     "CECO_DESTINO",
     "CATEGORIA",
 ]
+
 
 # --------------------------------------------------
 # Inicializar session_state
@@ -319,11 +433,12 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
         if n == "idreq":
             rename_map[col] = "ID_REQ"
         elif n == "estatus":
-            rename_map[col] = "Estatus"
+            rename_map[col] = "ESTATUS"
         elif n == "fechadepedido":
             rename_map[col] = "FECHA DE PEDIDO"
-        elif n == "fechadeentrega":
-            rename_map[col] = "FECHA DE ENTREGA"
+        elif n in ("fechaderecepcion", "fechaderecepción"):
+            rename_map[col] = "FECHA DE RECEPCIÓN"
+
 
     df = df.rename(columns=rename_map)
     df.columns = df.columns.astype(str).str.strip()
@@ -421,19 +536,55 @@ def enviar_nuevo_producto_a_catalogo(nombre: str):
 # Selector de vista
 # --------------------------------------------------
 vista = st.sidebar.radio(
-    "Selecciona vista:",
+    "Selecciona el proceso:",
     (
-        "📥 Carga de inventario",
-        "📊 Último inventario cargado",
+        "📥 Carga de Inventario",
+        "📊 Consulta último inventario cargado",
         "📨 Requerimientos de producto",
+        "❓ FAQs",
+
     )
 )
+# --------------------------------------------------
+# VISTA FAQs
+# --------------------------------------------------
+if vista == "❓ FAQs":
+
+    st.title("Carga de inventario")
+
+    st.write(
+        "Flujo:\n"
+        "1) Descarga la plantilla, puedes encontrar el vínculo de descarga en la vista Carga de Inventario.\n"
+        "2) Llenan la hoja **Movimientos_Inventario** en Excel/CSV, ** La primeras 4 columnas quedan vacías**.\n"
+        "3) Sube el archivo.\n"
+        "4) Anota el folio generado para futuras consultas.\n"
+
+    )
+
+    st.title("Requerimientos de producto")
+
+    st.write(
+        "Flujo:\n"
+        "1) Selecciona CECO Destino.\n"
+        "2) Selecciona productos por categoría.\n"
+        "3) Agrega las cantidades necesarias y observaciones.\n"
+        "4) Una vez que confirmaste cantidades da clíck en **agregar producto al requerimiento**.\n"
+        "5) Verifica los productos agregados y cantidades nuevamente, da clíck en ** confirmar y enviar requerimiento**.\n"
+        "6) Anota el folio generado para futuras consultas.\n"
+
+    )
+
+
+# ---------
+
+
+
 
 # --------------------------------------------------
 # VISTA 1: Carga de inventario
 # --------------------------------------------------
-if vista == "📥 Carga de inventario":
-    st.header("📥 Carga de inventario")
+if vista == "📥 Carga de Inventario":
+    st.header("📥 Carga de Inventario")
 
     st.subheader("1. Estructura base desde Google Sheets (solo lectura)")
     try:
@@ -451,7 +602,7 @@ if vista == "📥 Carga de inventario":
 
     st.subheader("2. Descargar plantilla de inventario")
     st.write(
-        "Descarga la plantilla oficial desde Google Sheets. "
+        "Descarga la plantilla . "
         "Incluye la hoja **Movimientos_Inventario** y **Catalogo_Productos**."
     )
     st.markdown(
@@ -523,8 +674,8 @@ if vista == "📥 Carga de inventario":
 # --------------------------------------------------
 # VISTA 2: Último inventario cargado
 # --------------------------------------------------
-elif vista == "📊 Último inventario cargado":
-    st.header("📊 Último inventario cargado en esta sesión")
+elif vista == "📊 Consulta último inventario cargado":
+    st.header("📊 Consulta último inventario cargado")
 
     ultimo_df = st.session_state["ultimo_inventario_df"]
     folio = st.session_state["ultimo_inventario_folio"]
@@ -611,7 +762,7 @@ elif vista == "📨 Requerimientos de producto":
             "Waldos & Crispier",
             "Eventos",
         ]
-        ceco_destino = col1.selectbox("CECO destino", opciones_ceco)
+        ceco_destino = col1.selectbox("CECO Destino", opciones_ceco)
 
         fecha_requerida = col2.date_input(
             "Fecha requerida (fecha de entrega)",
@@ -658,6 +809,10 @@ elif vista == "📨 Requerimientos de producto":
         if producto_sel == OPCION_OTRO:
             es_nuevo = True
             st.info("Captura datos para agregar un nuevo producto al catálogo.")
+            st.warning(
+                "⚠️ Este producto **no está en el catálogo**. "
+                "Es obligatorio **justificar la compra** en el campo *Observaciones* para poder agregarlo."
+            )
             producto_final = st.text_input("Nombre del nuevo producto")
         else:
             es_nuevo = False
@@ -673,7 +828,7 @@ elif vista == "📨 Requerimientos de producto":
             step=1.0
         )
 
-        factura = st.text_input("Factura (si aplica, para este producto)")
+        #factura = st.text_input("Factura (si aplica, para este producto)")
         observaciones = st.text_area("Observaciones (para este producto)")
 
         colb1, _ = st.columns(2)
@@ -684,17 +839,26 @@ elif vista == "📨 Requerimientos de producto":
     # ---------- 2.a) Manejar botón: Agregar producto al carrito ----------
     if add_line:
         errores = []
+
         if producto_final is None or producto_final == "":
             errores.append("Debes seleccionar un producto o capturar uno nuevo.")
+
         if cantidad <= 0:
             errores.append("La *Cantidad requerida* debe ser mayor a 0.")
+
+        # 🔴 Regla nueva: si es un producto nuevo, Observaciones es obligatorio
+        if es_nuevo and (not observaciones or not observaciones.strip()):
+            errores.append(
+                "Para productos que **no están en el catálogo** es obligatorio "
+                "justificar la compra en el campo *Observaciones*."
+            )
 
         if errores:
             st.error("No se pudo agregar el producto al requerimiento:")
             for e in errores:
                 st.write("-", e)
         else:
-            # Determinar categoría del producto
+            # Determinar categoría del producto (lo que ya tenías)
             if es_nuevo:
                 if categoria_sel != OPCION_TODAS:
                     categoria_item = categoria_sel
@@ -720,15 +884,16 @@ elif vista == "📨 Requerimientos de producto":
                 "INSUMO": producto_final,
                 "UNIDAD DE MEDIDA": "pz",
                 "CANTIDAD": cantidad,
-                "Factura": factura,
                 "Observaciones": observaciones,
-                "Categoria": categoria_item,  # 👈 interno en el carrito
+                "Categoria": categoria_item,
             }
             st.session_state["carrito_req"].append(item)
             st.success(
                 f"Producto agregado al requerimiento: {producto_final} "
                 f"(Cantidad: {cantidad}, Categoría: {categoria_item})"
             )
+
+
     # ---------- Vista del carrito actual ----------
     if st.session_state["carrito_req"]:
         st.markdown("### 🛒 Carrito de productos del requerimiento actual")
@@ -788,18 +953,18 @@ elif vista == "📨 Requerimientos de producto":
                         "PROVEDOR": proveedor,
                         "INSUMO": item["INSUMO"],
                         "UNIDAD DE MEDIDA": item["UNIDAD DE MEDIDA"],
+                        "COSTO UNIDAD": "",  # lo podrás rellenar después en la hoja
                         "CANTIDAD": item["CANTIDAD"],
-                        "COSTO UNIDAD": "",
-                        "COSTO TOTAL": "",
-                        "FECHA DE ENTREGA": fecha_requerida.isoformat(),
-                        "Factura": item["Factura"],
-                        "Observaciones": item["Observaciones"],
-                        "Estatus": "Pendiente",
+                        "COSTO TOTAL": "",  # idem
+                        "FECHA DE RECEPCIÓN": fecha_requerida.isoformat(),
+                        "FACTURA": "",  # ya no se captura en el formulario
+                        "OBSERVACIONES": item["Observaciones"],
+                        "ESTATUS": "Pendiente",
                         "ID_REQ": folio_req,
                         "Fecha": fecha_creacion,
                         "Hora": hora_creacion,
                         "CECO_DESTINO": ceco_destino,
-                        "CATEGORIA": item.get("Categoria", "Sin categoría"),  # 👈 clave igual que en la hoja
+                        "CATEGORIA": item.get("Categoria", "Sin categoría"),
                     }
                     lista_req_data.append(req_data)
 
@@ -831,7 +996,8 @@ elif vista == "📨 Requerimientos de producto":
             load_requerimientos_from_gsheet.clear()
             req_df = load_requerimientos_from_gsheet()
 
-            if "ID_REQ" not in req_df.columns or "Estatus" not in req_df.columns:
+            if "ID_REQ" not in req_df.columns or "ESTATUS" not in req_df.columns:
+
                 st.error(
                     "No pude encontrar columnas 'ID_REQ' y 'Estatus' en la hoja de requerimientos.\n\n"
                     f"Columnas leídas: {list(req_df.columns)}\n\n"
@@ -859,15 +1025,15 @@ elif vista == "📨 Requerimientos de producto":
                 df_filtrado = req_df_sorted
 
             # ---------- Resumen por ID_REQ (solo del filtrado) ----------
-            agg_dict = {"Estatus": "last"}
-            cols_resumen = ["ID_REQ", "Estatus"]
+            agg_dict = {"ESTATUS": "last"}
+            cols_resumen = ["ID_REQ", "ESTATUS"]
 
             if "FECHA DE PEDIDO" in df_filtrado.columns:
                 agg_dict["FECHA DE PEDIDO"] = "last"
                 cols_resumen.append("FECHA DE PEDIDO")
-            if "FECHA DE ENTREGA" in df_filtrado.columns:
-                agg_dict["FECHA DE ENTREGA"] = "last"
-                cols_resumen.append("FECHA DE ENTREGA")
+            if "FECHA DE RECEPCIÓN" in df_filtrado.columns:
+                agg_dict["FECHA DE RECEPCIÓN"] = "last"
+                cols_resumen.append("FECHA DE RECEPCIÓN")
 
             resumen = (
                 df_filtrado
@@ -893,10 +1059,10 @@ elif vista == "📨 Requerimientos de producto":
                     "INSUMO",
                     "UNIDAD DE MEDIDA",
                     "CANTIDAD",
-                    "FECHA DE ENTREGA" if "FECHA DE ENTREGA" in detalle.columns else None,
-                    "Factura",
-                    "Estatus",
-                    "Observaciones",
+                    "FECHA DE RECEPCIÓN" if "FECHA DE RECEPCIÓN" in detalle.columns else None,
+                    "FACTURA",
+                    "ESTATUS",
+                    "OBSERVACIONES",
                 ] if c is not None and c in detalle.columns]
 
                 st.dataframe(
