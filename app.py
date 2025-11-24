@@ -538,8 +538,8 @@ def enviar_nuevo_producto_a_catalogo(nombre: str):
 vista = st.sidebar.radio(
     "Selecciona el proceso:",
     (
-        "📥 Carga de Inventario",
-        "📊 Consulta último inventario cargado",
+       # "📥 Carga de Inventario",
+       # "📊 Consulta último inventario cargado",
         "📨 Requerimientos de producto",
         "❓ FAQs",
 
