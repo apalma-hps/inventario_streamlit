@@ -897,10 +897,12 @@ elif vista == "📨 Requerimientos de producto":
     # ---------- Vista del carrito actual ----------
     if st.session_state["carrito_req"]:
         st.markdown("### 🛒 Carrito de productos del requerimiento actual")
-
+    
+        # Creamos un DataFrame y guardamos el índice original del carrito
         carrito_df = pd.DataFrame(st.session_state["carrito_req"])
+        carrito_df["__idx__"] = carrito_df.index
 
-        if "Categoria" in carrito_df.columns:
+           if "Categoria" in carrito_df.columns:
             # Ordenamos por categoría para que se vea agrupado
             categorias_orden = (
                 carrito_df["Categoria"]
@@ -909,24 +911,61 @@ elif vista == "📨 Requerimientos de producto":
                 .unique()
                 .tolist()
             )
-
+    
             for cat in categorias_orden:
                 subset = carrito_df[carrito_df["Categoria"] == cat]
                 st.markdown(f"#### 📂 {cat}")
-                st.dataframe(
-                    subset.drop(columns=["Categoria"]),
-                    use_container_width=True,
-                )
+    
+                # Encabezados "manuales"
+                header_cols = st.columns([4, 2, 2, 4, 1])
+                header_cols[0].markdown("**Producto**")
+                header_cols[1].markdown("**Unidad**")
+                header_cols[2].markdown("**Cantidad**")
+                header_cols[3].markdown("**Observaciones**")
+                header_cols[4].markdown("**Borrar**")
+    
+                # Una fila por producto, con botón de borrado
+                for _, row in subset.iterrows():
+                    c1, c2, c3, c4, c5 = st.columns([4, 2, 2, 4, 1])
+                    c1.write(row.get("INSUMO", ""))
+                    c2.write(row.get("UNIDAD DE MEDIDA", ""))
+                    c3.write(row.get("CANTIDAD", ""))
+                    c4.write(row.get("Observaciones", ""))
+    
+                    delete_key = f"del_{int(row['__idx__'])}"
+                    if c5.button("❌", key=delete_key):
+                        # Borramos del carrito usando el índice original
+                        st.session_state["carrito_req"].pop(int(row["__idx__"]))
+                        st.rerun()
         else:
-            st.dataframe(carrito_df, use_container_width=True)
-
-        colc1, colc2 = st.columns(2)
-        vaciar = colc1.button("🗑️ Vaciar carrito")
-        send_req = colc2.button("✅ Confirmar y enviar requerimiento", key="btn_send_req")
-
-        if vaciar:
-            st.session_state["carrito_req"] = []
-            st.info("Carrito vaciado.")
+            # Sin categorías, misma lógica pero sin agrupar
+            header_cols = st.columns([4, 2, 2, 4, 1])
+            header_cols[0].markdown("**Producto**")
+            header_cols[1].markdown("**Unidad**")
+            header_cols[2].markdown("**Cantidad**")
+            header_cols[3].markdown("**Observaciones**")
+            header_cols[4].markdown("**Borrar**")
+    
+            for _, row in carrito_df.iterrows():
+                c1, c2, c3, c4, c5 = st.columns([4, 2, 2, 4, 1])
+                c1.write(row.get("INSUMO", ""))
+                c2.write(row.get("UNIDAD DE MEDIDA", ""))
+                c3.write(row.get("CANTIDAD", ""))
+                c4.write(row.get("Observaciones", ""))
+    
+                delete_key = f"del_{int(row['__idx__'])}"
+                if c5.button("❌", key=delete_key):
+                    st.session_state["carrito_req"].pop(int(row["__idx__"]))
+                    st.rerun()
+    
+    
+            colc1, colc2 = st.columns(2)
+            vaciar = colc1.button("🗑️ Vaciar carrito")
+            send_req = colc2.button("✅ Confirmar y enviar requerimiento", key="btn_send_req")
+    
+            if vaciar:
+                st.session_state["carrito_req"] = []
+                st.info("Carrito vaciado.")
 
         # ---------- Confirmar y enviar requerimiento ----------
         if send_req:
