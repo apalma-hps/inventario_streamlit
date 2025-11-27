@@ -5,6 +5,45 @@ from datetime import datetime, date
 import pytz
 import os
 import requests
+import altair as alt
+
+def hp_altair_theme():
+    return {
+        "config": {
+            "background": "rgba(0,0,0,0)",
+            "view": {"stroke": "transparent"},
+            "axis": {
+                "labelColor": "#64748B",   # slate-500
+                "titleColor": "#0F172A",   # slate-900
+                "gridColor": "#E5E7EB",
+            },
+            "legend": {
+                "labelColor": "#0F172A",
+                "titleColor": "#0F172A",
+            },
+            "line": {
+                "strokeWidth": 3,
+            },
+            "range": {
+                "category": [
+                    "#0F172A",  # negro para Masaryk
+                    "#06B6D4",  # cyan
+                    "#A855F7",  # violeta
+                    "#22C55E",  # verde
+                    "#F97316",  # naranja
+                    "#EC4899",  # rosa
+                ]
+            },
+        }
+    }
+
+alt.themes.register("hp_theme", hp_altair_theme)
+alt.themes.enable("hp_theme")
+
+
+
+LOGO_URL = "https://raw.githubusercontent.com/apalma-hps/Dashboard-Ventas-HP/49cbb064b6dcf8eecaa4fb39292d9fe94f357d49/logo_hp.png"
+
 
 
 LOGO_URL = "https://raw.githubusercontent.com/apalma-hps/inventario_streamlit/c773df92eb1036c7f4d9446462f3b8472b4eee29/20250625_1445_Neon%20Diner%20Night_remix_01jymd8rw4fed8atev6x9n3757.png"
@@ -23,6 +62,7 @@ st.set_page_config(
 # --------------------------------------------------
 st.markdown("""
 <style>
+<<<<<<< HEAD
 
     /* Fondo general */
     .stApp {
@@ -107,18 +147,262 @@ st.markdown("""
         background-color: #3d2d11 !important;
         color: #F4D38C !important;
         border-left: 4px solid #F4D38C !important;
+=======
+    /* =========================
+       FONDO GENERAL / LAYOUT
+       ========================= */
+    body {
+        background: #E5F3FF !important;
+    }
+
+    .stApp {
+        background: linear-gradient(135deg, #E0F2FE 0%, #ECFDF5 50%, #FDF2F8 100%) !important;
+        color: #0F172A !important;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    /* Barra superior de Streamlit (para quitar franja negra) */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+    }
+    header[data-testid="stHeader"] > div {
+        background: transparent !important;
+    }
+
+    main.block-container {
+        padding-top: 1rem !important;
+    }
+
+    /* =========================
+       SIDEBAR
+       ========================= */
+    section[data-testid="stSidebar"] {
+        background-color: #FFFFFF !important;
+        border-right: 1px solid #E5E7EB !important;
+    }
+    section[data-testid="stSidebar"] * {
+        color: #0F172A !important;
+    }
+
+    /* =========================
+       TIPOGRAFÍA
+       ========================= */
+    h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
+        color: #0F172A !important;
+        font-weight: 700 !important;
+    }
+    h4, h5 {
+        color: #111827 !important;
+        font-weight: 600 !important;
+    }
+
+    label, span, p, li, .stMarkdown, [data-testid="stMarkdownContainer"] * {
+        color: #0F172A !important;
+    }
+
+    /* =========================
+       ENLACES
+       ========================= */
+    a {
+        color: #06B6D4 !important;
+        text-decoration: none !important;
+    }
+    a:hover {
+        color: #0E7490 !important;
+        text-decoration: underline !important;
+    }
+
+    /* =========================
+       BOTONES
+       ========================= */
+    /* Botones "base" de Streamlit (Actualizar, Agregar producto, etc.) */
+    button[kind="primary"],
+    button[kind="secondary"],
+    button[data-testid^="baseButton"] {
+        background: linear-gradient(135deg, #06B6D4, #22C55E) !important;
+        color: #FFFFFF !important;
+        border-radius: 999px !important;
+        border: none !important;
+        box-shadow: 0 8px 20px rgba(8, 145, 178, 0.25) !important;
+        font-weight: 600 !important;
+    }
+    button[kind="primary"]:hover,
+    button[kind="secondary"]:hover,
+    button[data-testid^="baseButton"]:hover {
+        background: linear-gradient(135deg, #0891B2, #16A34A) !important;
+    }
+
+    /* Botones +/- de number_input: que NO se vean negros */
+    [data-testid="stNumberInput"] button {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        border: 1px solid #D1D5DB !important;
+        border-radius: 0.75rem !important;
+        box-shadow: none !important;
+    }
+
+    /* =========================
+       INPUTS (texto, número, fecha, textarea, select)
+       ========================= */
+    input,
+    .stTextInput > div > input,
+    .stNumberInput input,
+    textarea {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        border: 1px solid #D1D5DB !important;
+        border-radius: 0.75rem !important;
+        padding: 0.45rem 0.75rem !important;
+    }
+    input:focus,
+    .stTextInput > div > input:focus,
+    .stNumberInput input:focus,
+    textarea:focus {
+        outline: 2px solid #06B6D4 !important;
+        border-color: #06B6D4 !important;
+    }
+
+    /* Date input que se veía negro */
+    [data-testid="stDateInput"] input {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        border: 1px solid #D1D5DB !important;
+        border-radius: 0.75rem !important;
+    }
+
+    /* Selects "cerrados" (la caja donde se ve el valor) */
+    div[data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        border-radius: 0.75rem !important;
+        border: 1px solid #D1D5DB !important;
+    }
+    div[data-baseweb="select"] svg {
+        color: #64748B !important;
+    }
+
+        /* =========================
+       MENÚ DESPLEGABLE DE SELECTBOX
+       (forzar que NO sea negro)
+       ========================= */
+
+    /* Contenedor del menú de BaseWeb */
+    [data-baseweb="menu"],
+    [data-baseweb="popover"] [data-baseweb="menu"] {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        border-radius: 0.75rem !important;
+        border: 1px solid #E5E7EB !important;
+        box-shadow: 0 18px 45px rgba(15,23,42,0.18) !important;
+    }
+
+    /* Listbox interno */
+    [data-baseweb="menu"] ul[role="listbox"],
+    [data-baseweb="menu"] div[role="listbox"] {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+    }
+
+    /* Opciones */
+    [data-baseweb="menu"] [role="option"],
+    [data-baseweb="menu"] li[role="option"] {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+    }
+
+    /* Opción seleccionada / hover */
+    [data-baseweb="menu"] [role="option"][aria-selected="true"],
+    [data-baseweb="menu"] [role="option"]:hover {
+        background-color: #DBEAFE !important;  /* azul clarito */
+        color: #0F172A !important;
+    }
+
+   /* =========================
+       TABLAS / DATAFRAMES
+       ========================= */
+    .dataframe {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        border-radius: 1rem !important;
+        border: 1px solid #E5E7EB !important;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06) !important;
+    }
+    
+    /* Tablas de Streamlit */
+    [data-testid="stDataFrame"],
+    [data-testid="stTable"] {
+        background-color: #FFFFFF !important;
+    }
+    
+    [data-testid="stDataFrame"] table,
+    [data-testid="stTable"] table {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+    }
+    
+    [data-testid="stDataFrame"] th,
+    [data-testid="stTable"] th {
+        background-color: #F8FAFC !important;
+        color: #0F172A !important;
+        font-weight: 600 !important;
+    }
+    
+    [data-testid="stDataFrame"] td,
+    [data-testid="stTable"] td {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+    }
+    
+    [data-testid="stDataFrame"] tr:hover td,
+    [data-testid="stTable"] tr:hover td {
+        background-color: #F1F5F9 !important;
+    }
+
+    /* =========================
+       MÉTRICAS
+       ========================= */
+    [data-testid="stMetric"] {
+        background-color: #FFFFFF !important;
+        border-radius: 1.5rem !important;
+        padding: 1.2rem 1.5rem !important;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08) !important;
+        border: 1px solid rgba(148, 163, 184, 0.25) !important;
+    }
+
+    /* =========================
+       ALERTAS
+       ========================= */
+    .stSuccess {
+        background-color: #ECFDF5 !important;
+        color: #16A34A !important;
+        border-left: 4px solid #16A34A !important;
+    }
+    .stError {
+        background-color: #FEF2F2 !important;
+        color: #DC2626 !important;
+        border-left: 4px solid #DC2626 !important;
+    }
+    .stWarning {
+        background-color: #FFFBEB !important;
+        color: #92400E !important;
+        border-left: 4px solid #F59E0B !important;
+>>>>>>> cee449b (Ajuste de tema)
     }
 
 </style>
 """, unsafe_allow_html=True)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> cee449b (Ajuste de tema)
 # --------------------------------------------------
 # Encabezado con logo desde Google Drive
 # --------------------------------------------------
 
 st.markdown(
     f"""
+<<<<<<< HEAD
     <div style="display:flex; align-items:center; gap:20px; margin-top:10px; margin-bottom:25px;">
         <img src="{LOGO_URL}" 
              style="
@@ -136,11 +420,55 @@ st.markdown(
         ">
             Sistema de Gestión de Inventario y Requerimientos
         </h1>
+=======
+    <div style="
+        display:flex;
+        align-items:center;
+        gap:20px;
+        margin-top:10px;
+        margin-bottom:25px;
+        padding:18px 22px;
+        background-color: rgba(255,255,255,0.9);
+        border-radius: 24px;
+        box-shadow: 0 18px 45px rgba(15,23,42,0.08);
+    ">
+        <img src="{LOGO_URL}" 
+             style="
+                width:80px; 
+                height:80px; 
+                object-fit:contain; 
+                border-radius:50%; 
+                background:white;
+                box-shadow: 0 4px 12px rgba(15,23,42,0.18);
+             "/>
+        <div>
+            <h1 style="
+                font-size: 1.9rem; 
+                font-weight:700; 
+                margin:0; 
+                padding:0;
+                color:#0F172A;
+            ">
+                Sistema de Gestión de Inventario y Requerimientos
+            </h1>
+            <p style="
+                margin:4px 0 0 0;
+                color:#64748B;
+                font-size:0.95rem;
+            ">
+                Operación diaria · Control de insumos · Trazabilidad por restaurante
+            </p>
+        </div>
+>>>>>>> cee449b (Ajuste de tema)
     </div>
     """,
     unsafe_allow_html=True
 )
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> cee449b (Ajuste de tema)
 # --------------------------------------------------
 # URL de la plantilla de inventario (misma que usas para descarga)
 # --------------------------------------------------
@@ -538,8 +866,13 @@ def enviar_nuevo_producto_a_catalogo(nombre: str):
 vista = st.sidebar.radio(
     "Selecciona el proceso:",
     (
+<<<<<<< HEAD
        # "📥 Carga de Inventario",
         # "📊 Consulta último inventario cargado",
+=======
+        #"📥 Carga de Inventario",
+        #"📊 Consulta último inventario cargado",
+>>>>>>> cee449b (Ajuste de tema)
         "📨 Requerimientos de producto",
         "❓ FAQs",
 
