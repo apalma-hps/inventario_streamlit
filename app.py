@@ -392,10 +392,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-<<<<<<< HEAD
 
-=======
->>>>>>> cee449b (Ajuste de tema)
+
 # --------------------------------------------------
 # Encabezado con logo desde Google Drive
 # --------------------------------------------------
@@ -465,10 +463,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-<<<<<<< HEAD
-=======
-
->>>>>>> cee449b (Ajuste de tema)
 # --------------------------------------------------
 # URL de la plantilla de inventario (misma que usas para descarga)
 # --------------------------------------------------
@@ -866,13 +860,9 @@ def enviar_nuevo_producto_a_catalogo(nombre: str):
 vista = st.sidebar.radio(
     "Selecciona el proceso:",
     (
-<<<<<<< HEAD
+
        # "📥 Carga de Inventario",
         # "📊 Consulta último inventario cargado",
-=======
-        #"📥 Carga de Inventario",
-        #"📊 Consulta último inventario cargado",
->>>>>>> cee449b (Ajuste de tema)
         "📨 Requerimientos de producto",
         "❓ FAQs",
 
