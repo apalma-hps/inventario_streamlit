@@ -7,6 +7,7 @@ import os
 import requests
 import altair as alt
 
+
 def hp_altair_theme():
     return {
         "config": {
@@ -37,117 +38,28 @@ def hp_altair_theme():
         }
     }
 
+
 alt.themes.register("hp_theme", hp_altair_theme)
 alt.themes.enable("hp_theme")
 
-
-
+# Logo HP del dashboard de ventas
 LOGO_URL = "https://raw.githubusercontent.com/apalma-hps/Dashboard-Ventas-HP/49cbb064b6dcf8eecaa4fb39292d9fe94f357d49/logo_hp.png"
-
-
-
-LOGO_URL = "https://raw.githubusercontent.com/apalma-hps/inventario_streamlit/c773df92eb1036c7f4d9446462f3b8472b4eee29/20250625_1445_Neon%20Diner%20Night_remix_01jymd8rw4fed8atev6x9n3757.png"
-
 
 # --------------------------------------------------
 # Configuración básica de la página
 # --------------------------------------------------
 st.set_page_config(
     page_title="Inventario – Movimientos",
-    page_icon=LOGO_URL,   # ahora usa tu logo real
+    page_icon=LOGO_URL,
     layout="wide"
 )
+
 # --------------------------------------------------
-# THEME VISUAL A PARTIR DE LA IMAGEN DEL LOGO
+# THEME VISUAL
 # --------------------------------------------------
-st.markdown("""
+st.markdown(
+    """
 <style>
-<<<<<<< HEAD
-
-    /* Fondo general */
-    .stApp {
-        background-color: #060708 !important;
-        color: #F4D38C !important;
-    }
-
-    /* Sidebar */
-    section[data-testid="stSidebar"] {
-        background-color: #0B0C0D !important;
-        border-right: 1px solid #1d1d1d !important;
-    }
-
-    /* Títulos */
-    h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
-        color: #E03A2A !important;  /* rojo Hungry */
-        font-weight: 700 !important;
-    }
-
-    /* Subtítulos */
-    h4, h5 {
-        color: #F4D38C !important;
-    }
-
-    /* Enlaces */
-    a {
-        color: #47FF8A !important;  /* verde neón */
-        text-decoration: none !important;
-    }
-    a:hover {
-        color: #74FFAF !important;
-        text-decoration: underline !important;
-    }
-
-    /* Botones */
-    button[kind="primary"] {
-        background-color: #E03A2A !important;
-        color: white !important;
-        border-radius: 8px !important;
-        border: none !important;
-    }
-    button[kind="primary"]:hover {
-        background-color: #FF3B30 !important;
-    }
-
-    /* Inputs */
-    .stTextInput > div > input,
-    .stNumberInput input,
-    textarea,
-    select {
-        background-color: #0F1011 !important;
-        color: #F4D38C !important;
-        border: 1px solid #E03A2A55 !important;
-        border-radius: 6px !important;
-    }
-
-    /* Tablas */
-    .dataframe {
-        background-color: #0F1011 !important;
-        color: #F4D38C !important;
-        border-radius: 8px !important;
-    }
-
-    /* widgets internos */
-    div[data-baseweb="select"] > div {
-        background-color: #0F1011 !important;
-        color: #F4D38C !important;
-    }
-
-    /* Mensajes success / error / warning */
-    .stSuccess {
-        background-color: #113d23 !important;
-        color: #47FF8A !important;
-        border-left: 4px solid #47FF8A !important;
-    }
-    .stError {
-        background-color: #3d1111 !important;
-        color: #FF3B30 !important;
-        border-left: 4px solid #FF3B30 !important;
-    }
-    .stWarning {
-        background-color: #3d2d11 !important;
-        color: #F4D38C !important;
-        border-left: 4px solid #F4D38C !important;
-=======
     /* =========================
        FONDO GENERAL / LAYOUT
        ========================= */
@@ -215,7 +127,6 @@ st.markdown("""
     /* =========================
        BOTONES
        ========================= */
-    /* Botones "base" de Streamlit (Actualizar, Agregar producto, etc.) */
     button[kind="primary"],
     button[kind="secondary"],
     button[data-testid^="baseButton"] {
@@ -232,7 +143,7 @@ st.markdown("""
         background: linear-gradient(135deg, #0891B2, #16A34A) !important;
     }
 
-    /* Botones +/- de number_input: que NO se vean negros */
+    /* Botones +/- de number_input */
     [data-testid="stNumberInput"] button {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
@@ -242,7 +153,7 @@ st.markdown("""
     }
 
     /* =========================
-       INPUTS (texto, número, fecha, textarea, select)
+       INPUTS
        ========================= */
     input,
     .stTextInput > div > input,
@@ -262,7 +173,7 @@ st.markdown("""
         border-color: #06B6D4 !important;
     }
 
-    /* Date input que se veía negro */
+    /* Date input */
     [data-testid="stDateInput"] input {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
@@ -270,7 +181,7 @@ st.markdown("""
         border-radius: 0.75rem !important;
     }
 
-    /* Selects "cerrados" (la caja donde se ve el valor) */
+    /* Selects cerrados */
     div[data-baseweb="select"] > div {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
@@ -281,12 +192,7 @@ st.markdown("""
         color: #64748B !important;
     }
 
-        /* =========================
-       MENÚ DESPLEGABLE DE SELECTBOX
-       (forzar que NO sea negro)
-       ========================= */
-
-    /* Contenedor del menú de BaseWeb */
+    /* Menú desplegable de select (BaseWeb) */
     [data-baseweb="menu"],
     [data-baseweb="popover"] [data-baseweb="menu"] {
         background-color: #FFFFFF !important;
@@ -296,28 +202,25 @@ st.markdown("""
         box-shadow: 0 18px 45px rgba(15,23,42,0.18) !important;
     }
 
-    /* Listbox interno */
     [data-baseweb="menu"] ul[role="listbox"],
     [data-baseweb="menu"] div[role="listbox"] {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
     }
 
-    /* Opciones */
     [data-baseweb="menu"] [role="option"],
     [data-baseweb="menu"] li[role="option"] {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
     }
 
-    /* Opción seleccionada / hover */
     [data-baseweb="menu"] [role="option"][aria-selected="true"],
     [data-baseweb="menu"] [role="option"]:hover {
-        background-color: #DBEAFE !important;  /* azul clarito */
+        background-color: #DBEAFE !important;
         color: #0F172A !important;
     }
 
-   /* =========================
+    /* =========================
        TABLAS / DATAFRAMES
        ========================= */
     .dataframe {
@@ -327,32 +230,31 @@ st.markdown("""
         border: 1px solid #E5E7EB !important;
         box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06) !important;
     }
-    
-    /* Tablas de Streamlit */
+
     [data-testid="stDataFrame"],
     [data-testid="stTable"] {
         background-color: #FFFFFF !important;
     }
-    
+
     [data-testid="stDataFrame"] table,
     [data-testid="stTable"] table {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
     }
-    
+
     [data-testid="stDataFrame"] th,
     [data-testid="stTable"] th {
         background-color: #F8FAFC !important;
         color: #0F172A !important;
         font-weight: 600 !important;
     }
-    
+
     [data-testid="stDataFrame"] td,
     [data-testid="stTable"] td {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
     }
-    
+
     [data-testid="stDataFrame"] tr:hover td,
     [data-testid="stTable"] tr:hover td {
         background-color: #F1F5F9 !important;
@@ -386,39 +288,18 @@ st.markdown("""
         background-color: #FFFBEB !important;
         color: #92400E !important;
         border-left: 4px solid #F59E0B !important;
->>>>>>> cee449b (Ajuste de tema)
     }
 
 </style>
-""", unsafe_allow_html=True)
-
-
+""",
+    unsafe_allow_html=True,
+)
 
 # --------------------------------------------------
-# Encabezado con logo desde Google Drive
+# Encabezado con logo
 # --------------------------------------------------
-
 st.markdown(
     f"""
-<<<<<<< HEAD
-    <div style="display:flex; align-items:center; gap:20px; margin-top:10px; margin-bottom:25px;">
-        <img src="{LOGO_URL}" 
-             style="
-                width:120px; 
-                height:120px; 
-                object-fit:cover; 
-                border-radius:50%; 
-                box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-             "/>
-        <h1 style="
-            font-size: 2.1rem; 
-            font-weight:700; 
-            margin:0; 
-            padding:0;
-        ">
-            Sistema de Gestión de Inventario y Requerimientos
-        </h1>
-=======
     <div style="
         display:flex;
         align-items:center;
@@ -457,10 +338,9 @@ st.markdown(
                 Operación diaria · Control de insumos · Trazabilidad por restaurante
             </p>
         </div>
->>>>>>> cee449b (Ajuste de tema)
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 # --------------------------------------------------
@@ -521,7 +401,6 @@ REQUERIMIENTOS_COLUMNS = [
     "CATEGORIA",
 ]
 
-
 # --------------------------------------------------
 # Inicializar session_state
 # --------------------------------------------------
@@ -534,15 +413,12 @@ if "ultimo_inventario_fecha" not in st.session_state:
 if "ultimo_inventario_hora" not in st.session_state:
     st.session_state["ultimo_inventario_hora"] = None
 
-# carrito de productos para el requerimiento actual
 if "carrito_req" not in st.session_state:
-    st.session_state["carrito_req"] = []  # lista de dicts {INSUMO, CANTIDAD, UNIDAD, Factura, Observaciones}
-
+    st.session_state["carrito_req"] = []
 
 # --------------------------------------------------
 # Funciones auxiliares – Inventario
 # --------------------------------------------------
-
 @st.cache_data
 def load_movimientos_template_from_gsheet() -> pd.DataFrame:
     sheet_url = st.secrets["MOVIMIENTOS_TEMPLATE_CSV_URL"]
@@ -593,8 +469,7 @@ def leer_archivo_movimientos(uploaded_file) -> pd.DataFrame:
             df = pd.read_csv(uploaded_file, encoding="latin1")
     else:
         st.error(
-            f"Tipo de archivo no soportado: .{ext}. "
-            "Usa archivos Excel (.xlsx, .xls) o CSV."
+            f"Tipo de archivo no soportado: .{ext}. Usa archivos Excel (.xlsx, .xls) o CSV."
         )
         st.stop()
 
@@ -648,8 +523,7 @@ def enviar_a_consolidado(df: pd.DataFrame):
 
     if not url:
         st.warning(
-            "No se configuró APPS_SCRIPT_CONSOLIDADO_URL en secrets. "
-            "No se enviará nada al consolidado."
+            "No se configuró APPS_SCRIPT_CONSOLIDADO_URL en secrets. No se enviará nada al consolidado."
         )
         return
 
@@ -695,7 +569,6 @@ def enviar_a_consolidado(df: pd.DataFrame):
 # --------------------------------------------------
 # Funciones auxiliares – Catálogo y Requerimientos
 # --------------------------------------------------
-
 @st.cache_data
 def load_catalogo_productos() -> pd.DataFrame:
     df = pd.read_excel(
@@ -708,7 +581,6 @@ def load_catalogo_productos() -> pd.DataFrame:
     if "Producto" not in df.columns:
         raise ValueError("La hoja Catalogo_Productos no contiene la columna 'Producto'.")
 
-    # Usar columnas reales del catálogo
     if "Categoria" in df.columns:
         df = df[["Categoria", "Producto"]].copy()
     else:
@@ -739,7 +611,6 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
     except pd.errors.ParserError:
         df = pd.read_csv(url, engine="python", on_bad_lines="skip")
 
-    # Normalizar y renombrar columnas clave
     def norm(s: str) -> str:
         return (
             str(s)
@@ -761,7 +632,6 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
         elif n in ("fechaderecepcion", "fechaderecepción"):
             rename_map[col] = "FECHA DE RECEPCIÓN"
 
-
     df = df.rename(columns=rename_map)
     df.columns = df.columns.astype(str).str.strip()
 
@@ -778,15 +648,11 @@ def generar_folio_requerimiento() -> (str, str, str):
 
 
 def enviar_requerimientos_a_gsheet(lista_req_data):
-    """
-    Envía una lista de dicts (varios productos) al Apps Script de Requerimientos.
-    """
     url = st.secrets.get("APPS_SCRIPT_REQUERIMIENTOS_URL", "")
 
     if not url:
         st.warning(
-            "No se configuró APPS_SCRIPT_REQUERIMIENTOS_URL en secrets. "
-            "No se enviarán los requerimientos."
+            "No se configuró APPS_SCRIPT_REQUERIMIENTOS_URL en secrets. No se enviarán los requerimientos."
         )
         return
 
@@ -824,10 +690,6 @@ def enviar_requerimientos_a_gsheet(lista_req_data):
 
 
 def enviar_nuevo_producto_a_catalogo(nombre: str):
-    """
-    Envía un nuevo producto para que Apps Script lo inserte
-    en la hoja Catalogo_Productos (solo columna Producto).
-    """
     url = st.secrets.get("APPS_SCRIPT_CATALOGO_URL", "")
     if not url:
         st.warning(
@@ -860,51 +722,39 @@ def enviar_nuevo_producto_a_catalogo(nombre: str):
 vista = st.sidebar.radio(
     "Selecciona el proceso:",
     (
-
-       # "📥 Carga de Inventario",
+        # "📥 Carga de Inventario",
         # "📊 Consulta último inventario cargado",
         "📨 Requerimientos de producto",
         "❓ FAQs",
-
-    )
+    ),
 )
+
 # --------------------------------------------------
 # VISTA FAQs
 # --------------------------------------------------
 if vista == "❓ FAQs":
-
     st.title("Carga de inventario")
-
     st.write(
         "Flujo:\n"
         "1) Descarga la plantilla, puedes encontrar el vínculo de descarga en la vista Carga de Inventario.\n"
-        "2) Llenan la hoja **Movimientos_Inventario** en Excel/CSV, ** La primeras 4 columnas quedan vacías**.\n"
+        "2) Llenan la hoja **Movimientos_Inventario** en Excel/CSV, **las primeras 4 columnas quedan vacías**.\n"
         "3) Sube el archivo.\n"
         "4) Anota el folio generado para futuras consultas.\n"
-
     )
 
     st.title("Requerimientos de producto")
-
     st.write(
         "Flujo:\n"
         "1) Selecciona CECO Destino.\n"
         "2) Selecciona productos por categoría.\n"
         "3) Agrega las cantidades necesarias y observaciones.\n"
-        "4) Una vez que confirmaste cantidades da clíck en **agregar producto al requerimiento**.\n"
-        "5) Verifica los productos agregados y cantidades nuevamente, da clíck en ** confirmar y enviar requerimiento**.\n"
+        "4) Una vez que confirmaste cantidades da clic en **Agregar producto al requerimiento**.\n"
+        "5) Verifica los productos agregados y cantidades nuevamente, da clic en **Confirmar y enviar requerimiento**.\n"
         "6) Anota el folio generado para futuras consultas.\n"
-
     )
 
-
-# ---------
-
-
-
-
 # --------------------------------------------------
-# VISTA 1: Carga de inventario
+# VISTA 1: Carga de inventario (oculta por ahora)
 # --------------------------------------------------
 if vista == "📥 Carga de Inventario":
     st.header("📥 Carga de Inventario")
@@ -925,18 +775,17 @@ if vista == "📥 Carga de Inventario":
 
     st.subheader("2. Descargar plantilla de inventario")
     st.write(
-        "Descarga la plantilla . "
-        "Incluye la hoja **Movimientos_Inventario** y **Catalogo_Productos**."
+        "Descarga la plantilla. Incluye la hoja **Movimientos_Inventario** y **Catalogo_Productos**."
     )
     st.markdown(
         f"[⬇️ Descargar plantilla de inventario (Excel con productos y fórmulas)]({PLANTILLA_INVENTARIO_XLSX_URL})",
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     st.subheader("3. Subir archivo con movimientos llenos y procesar")
     uploaded_file = st.file_uploader(
         "Sube tu archivo de movimientos (basado en la plantilla – Excel o CSV)",
-        type=["xlsx", "xls", "csv"]
+        type=["xlsx", "xls", "csv"],
     )
 
     if uploaded_file is not None:
@@ -974,15 +823,14 @@ if vista == "📥 Carga de Inventario":
                 enviar_a_consolidado(filtrado_df)
 
                 resultado_excel = df_to_excel_bytes(
-                    filtrado_df,
-                    sheet_name="Movimientos_Procesados"
+                    filtrado_df, sheet_name="Movimientos_Procesados"
                 )
 
                 st.download_button(
                     label="⬇️ Descargar movimientos procesados (Excel consolidado)",
                     data=resultado_excel,
                     file_name=f"movimientos_inventario_{folio}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             else:
                 st.warning(
@@ -995,7 +843,7 @@ if vista == "📥 Carga de Inventario":
             st.exception(e)
 
 # --------------------------------------------------
-# VISTA 2: Último inventario cargado
+# VISTA 2: Último inventario cargado (oculta por ahora)
 # --------------------------------------------------
 elif vista == "📊 Consulta último inventario cargado":
     st.header("📊 Consulta último inventario cargado")
@@ -1008,7 +856,7 @@ elif vista == "📊 Consulta último inventario cargado":
     if ultimo_df is None:
         st.warning(
             "Aún no se ha cargado ningún inventario en esta sesión.\n\n"
-            "Ve a la vista **'📥 Carga de inventario'**, procesa un archivo "
+            "Ve a la vista **'📥 Carga de Inventario'**, procesa un archivo "
             "y luego regresa aquí para ver el último inventario consolidado."
         )
     else:
@@ -1032,19 +880,18 @@ elif vista == "📊 Consulta último inventario cargado":
             st.dataframe(resumen_sku, use_container_width=True)
 
         resultado_excel = df_to_excel_bytes(
-            ultimo_df,
-            sheet_name="Ultimo_Inventario"
+            ultimo_df, sheet_name="Ultimo_Inventario"
         )
 
         st.download_button(
             label="⬇️ Descargar último inventario (Excel)",
             data=resultado_excel,
             file_name=f"ultimo_inventario_{folio}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
 # --------------------------------------------------
-# VISTA 3: Requerimientos de producto (con carrito multi-producto)
+# VISTA 3: Requerimientos de producto (con carrito)
 # --------------------------------------------------
 elif vista == "📨 Requerimientos de producto":
     st.header("📨 Requerimientos de producto")
@@ -1052,15 +899,7 @@ elif vista == "📨 Requerimientos de producto":
     # ---------- 1) Catálogo de productos ----------
     try:
         productos_df = load_catalogo_productos()
-        st.success(
-           "Catálogo de productos"
-            " cargado exitosamente."
-        )
-
-        # Ya no mostramos el catálogo completo
-        # with st.expander("Ver catálogo completo de productos"):
-        #     st.dataframe(productos_df, use_container_width=True)
-
+        st.success("Catálogo de productos cargado exitosamente.")
     except Exception as e:
         st.error(
             "No se pudo cargar el catálogo de productos desde la plantilla de inventario. "
@@ -1069,14 +908,12 @@ elif vista == "📨 Requerimientos de producto":
         st.exception(e)
         st.stop()
 
-    # ---------- 2) Formulario de captura (cabecera + línea de producto) ----------
+    # ---------- 2) Formulario de captura ----------
     st.subheader("📝 Crear nuevo requerimiento (carrito de productos)")
 
-    # Usamos un container en vez de st.form para que los filtros sean reactivos
     with st.container():
         col1, col2 = st.columns(2)
 
-        # CECO destino como lista fija
         opciones_ceco = [
             "Flautas Lamartine",
             "Burritos Masaryk",
@@ -1089,12 +926,11 @@ elif vista == "📨 Requerimientos de producto":
 
         fecha_requerida = col2.date_input(
             "Fecha requerida (fecha de entrega)",
-            value=date.today()
+            value=date.today(),
         )
 
         st.markdown("### Producto a agregar al requerimiento")
 
-        # --- Categoría (reactiva) ---
         categorias_unicas = sorted(
             productos_df["Categoria"].dropna().astype(str).unique().tolist()
         )
@@ -1103,7 +939,7 @@ elif vista == "📨 Requerimientos de producto":
         categoria_sel = st.selectbox(
             "Categoría de producto",
             [OPCION_TODAS] + categorias_unicas,
-            key="categoria_producto"
+            key="categoria_producto",
         )
 
         if categoria_sel == OPCION_TODAS:
@@ -1118,12 +954,14 @@ elif vista == "📨 Requerimientos de producto":
         )
 
         OPCION_OTRO = "Otro producto (no está en el catálogo)"
-        opciones_productos = ["--- Selecciona un producto ---"] + productos_unicos + [OPCION_OTRO]
+        opciones_productos = (
+            ["--- Selecciona un producto ---"] + productos_unicos + [OPCION_OTRO]
+        )
 
         producto_sel = st.selectbox(
             "Producto",
             opciones_productos,
-            key="producto_sel"
+            key="producto_sel",
         )
 
         es_nuevo = False
@@ -1134,7 +972,7 @@ elif vista == "📨 Requerimientos de producto":
             st.info("Captura datos para agregar un nuevo producto al catálogo.")
             st.warning(
                 "⚠️ Este producto **no está en el catálogo**. "
-                "Es obligatorio **justificar la compra** en el campo *Observaciones* para poder agregarlo."
+                "Es obligatorio **justificar la compra** en el campo *Observaciones*."
             )
             producto_final = st.text_input("Nombre del nuevo producto")
         else:
@@ -1148,18 +986,18 @@ elif vista == "📨 Requerimientos de producto":
         cantidad = st.number_input(
             "Cantidad requerida para este producto",
             min_value=0.0,
-            step=1.0
+            step=1.0,
         )
 
-        #factura = st.text_input("Factura (si aplica, para este producto)")
         observaciones = st.text_area("Observaciones (para este producto)")
 
         colb1, _ = st.columns(2)
-        add_line = colb1.button("➕ Agregar producto al requerimiento", key="btn_add_line")
-        # El botón de enviar lo movemos abajo, junto al de vaciar carrito
-        send_req = False  # lo definimos aquí para tenerlo siempre declarado
+        add_line = colb1.button(
+            "➕ Agregar producto al requerimiento", key="btn_add_line"
+        )
+        send_req = False
 
-    # ---------- 2.a) Manejar botón: Agregar producto al carrito ----------
+    # ---------- 2.a) Manejar botón: Agregar producto ----------
     if add_line:
         errores = []
 
@@ -1169,7 +1007,6 @@ elif vista == "📨 Requerimientos de producto":
         if cantidad <= 0:
             errores.append("La *Cantidad requerida* debe ser mayor a 0.")
 
-        # 🔴 Regla nueva: si es un producto nuevo, Observaciones es obligatorio
         if es_nuevo and (not observaciones or not observaciones.strip()):
             errores.append(
                 "Para productos que **no están en el catálogo** es obligatorio "
@@ -1181,7 +1018,6 @@ elif vista == "📨 Requerimientos de producto":
             for e in errores:
                 st.write("-", e)
         else:
-            # Determinar categoría del producto (lo que ya tenías)
             if es_nuevo:
                 if categoria_sel != OPCION_TODAS:
                     categoria_item = categoria_sel
@@ -1191,16 +1027,18 @@ elif vista == "📨 Requerimientos de producto":
                     enviar_nuevo_producto_a_catalogo(producto_final)
             else:
                 mask = (
-                        productos_df["Producto"]
-                        .astype(str)
-                        .str.strip()
-                        == str(producto_final).strip()
+                    productos_df["Producto"]
+                    .astype(str)
+                    .str.strip()
+                    == str(producto_final).strip()
                 )
                 if mask.any():
                     categoria_item = productos_df.loc[mask, "Categoria"].iloc[0]
                 else:
                     categoria_item = (
-                        categoria_sel if categoria_sel != OPCION_TODAS else "Sin categoría"
+                        categoria_sel
+                        if categoria_sel != OPCION_TODAS
+                        else "Sin categoría"
                     )
 
             item = {
@@ -1216,17 +1054,14 @@ elif vista == "📨 Requerimientos de producto":
                 f"(Cantidad: {cantidad}, Categoría: {categoria_item})"
             )
 
-
-    # ---------- Vista del carrito actual ----------
+    # ---------- Vista del carrito ----------
     if st.session_state["carrito_req"]:
         st.markdown("### 🛒 Carrito de productos del requerimiento actual")
 
-        # Creamos un DataFrame y guardamos el índice original del carrito
         carrito_df = pd.DataFrame(st.session_state["carrito_req"])
         carrito_df["__idx__"] = carrito_df.index
 
         if "Categoria" in carrito_df.columns:
-            # Ordenamos por categoría para que se vea agrupado
             categorias_orden = (
                 carrito_df["Categoria"]
                 .fillna("Sin categoría")
@@ -1239,7 +1074,6 @@ elif vista == "📨 Requerimientos de producto":
                 subset = carrito_df[carrito_df["Categoria"] == cat]
                 st.markdown(f"#### 📂 {cat}")
 
-                # Encabezados "manuales"
                 header_cols = st.columns([4, 2, 2, 4, 1])
                 header_cols[0].markdown("**Producto**")
                 header_cols[1].markdown("**Unidad**")
@@ -1247,7 +1081,6 @@ elif vista == "📨 Requerimientos de producto":
                 header_cols[3].markdown("**Observaciones**")
                 header_cols[4].markdown("**Borrar**")
 
-                # Una fila por producto, con botón de borrado
                 for _, row in subset.iterrows():
                     c1, c2, c3, c4, c5 = st.columns([4, 2, 2, 4, 1])
                     c1.write(row.get("INSUMO", ""))
@@ -1257,11 +1090,9 @@ elif vista == "📨 Requerimientos de producto":
 
                     delete_key = f"del_{int(row['__idx__'])}"
                     if c5.button("❌", key=delete_key):
-                        # Borramos del carrito usando el índice original
                         st.session_state["carrito_req"].pop(int(row["__idx__"]))
                         st.rerun()
         else:
-            # Sin categorías, misma lógica pero sin agrupar
             header_cols = st.columns([4, 2, 2, 4, 1])
             header_cols[0].markdown("**Producto**")
             header_cols[1].markdown("**Unidad**")
@@ -1283,13 +1114,14 @@ elif vista == "📨 Requerimientos de producto":
 
         colc1, colc2 = st.columns(2)
         vaciar = colc1.button("🗑️ Vaciar carrito")
-        send_req = colc2.button("✅ Confirmar y enviar requerimiento", key="btn_send_req")
+        send_req = colc2.button(
+            "✅ Confirmar y enviar requerimiento", key="btn_send_req"
+        )
 
         if vaciar:
             st.session_state["carrito_req"] = []
             st.info("Carrito vaciado.")
 
-        # ---------- Confirmar y enviar requerimiento ----------
         if send_req:
             errores = []
             if not ceco_destino:
@@ -1306,7 +1138,7 @@ elif vista == "📨 Requerimientos de producto":
                 st.info(f"Folio de requerimiento generado: **{folio_req}**")
 
                 lista_req_data = []
-                proveedor = ""  # de momento vacío
+                proveedor = ""
 
                 for item in st.session_state["carrito_req"]:
                     req_data = {
@@ -1314,11 +1146,11 @@ elif vista == "📨 Requerimientos de producto":
                         "PROVEDOR": proveedor,
                         "INSUMO": item["INSUMO"],
                         "UNIDAD DE MEDIDA": item["UNIDAD DE MEDIDA"],
-                        "COSTO UNIDAD": "",  # lo podrás rellenar después en la hoja
+                        "COSTO UNIDAD": "",
                         "CANTIDAD": item["CANTIDAD"],
-                        "COSTO TOTAL": "",  # idem
+                        "COSTO TOTAL": "",
                         "FECHA DE RECEPCIÓN": fecha_requerida.isoformat(),
-                        "FACTURA": "",  # ya no se captura en el formulario
+                        "FACTURA": "",
                         "OBSERVACIONES": item["Observaciones"],
                         "ESTATUS": "Pendiente",
                         "ID_REQ": folio_req,
@@ -1329,44 +1161,39 @@ elif vista == "📨 Requerimientos de producto":
                     }
                     lista_req_data.append(req_data)
 
-                # Opcional pero recomendable: ordenar por categoría y producto
                 lista_req_data = sorted(
                     lista_req_data,
-                    key=lambda x: (x.get("CATEGORIA", ""), x.get("INSUMO", ""))
+                    key=lambda x: (x.get("CATEGORIA", ""), x.get("INSUMO", "")),
                 )
 
                 enviar_requerimientos_a_gsheet(lista_req_data)
                 st.session_state["carrito_req"] = []
 
     else:
-        # Si no hay carrito, no mostramos botones
         send_req = False
 
-    # ---------- 3) Consulta de estatus de requerimientos ----------
+    # ---------- 3) Consulta de estatus ----------
     st.subheader("🔍 Consultar estatus de requerimientos")
 
     col_f1, col_f2 = st.columns(2)
     filtro_folio = col_f2.text_input(
         "Buscar por folio (ID_REQ) (opcional, coincidencia parcial)",
-        value=""
+        value="",
     )
 
     if st.button("🔄 Actualizar listado"):
         try:
-            # Recargar datos frescos desde el CSV
             load_requerimientos_from_gsheet.clear()
             req_df = load_requerimientos_from_gsheet()
 
             if "ID_REQ" not in req_df.columns or "ESTATUS" not in req_df.columns:
-
                 st.error(
-                    "No pude encontrar columnas 'ID_REQ' y 'Estatus' en la hoja de requerimientos.\n\n"
+                    "No pude encontrar columnas 'ID_REQ' y 'ESTATUS' en la hoja de requerimientos.\n\n"
                     f"Columnas leídas: {list(req_df.columns)}\n\n"
                     "Revisa que el CSV de requerimientos tenga esos encabezados en la fila 1."
                 )
                 st.stop()
 
-            # Ordenar por Fecha/Hora si existen
             if "Fecha" in req_df.columns and "Hora" in req_df.columns:
                 req_df_sorted = req_df.sort_values(
                     by=["Fecha", "Hora"], ascending=[True, True]
@@ -1374,9 +1201,11 @@ elif vista == "📨 Requerimientos de producto":
             else:
                 req_df_sorted = req_df.copy()
 
-            # 🔹 Si hay folio escrito, filtramos TODO a ese folio
             if filtro_folio:
-                mask = req_df_sorted["ID_REQ"].astype(str).str.lower() == filtro_folio.lower()
+                mask = (
+                    req_df_sorted["ID_REQ"].astype(str).str.lower()
+                    == filtro_folio.lower()
+                )
                 df_filtrado = req_df_sorted[mask].copy()
 
                 if df_filtrado.empty:
@@ -1385,7 +1214,6 @@ elif vista == "📨 Requerimientos de producto":
             else:
                 df_filtrado = req_df_sorted
 
-            # ---------- Resumen por ID_REQ (solo del filtrado) ----------
             agg_dict = {"ESTATUS": "last"}
             cols_resumen = ["ID_REQ", "ESTATUS"]
 
@@ -1396,40 +1224,40 @@ elif vista == "📨 Requerimientos de producto":
                 agg_dict["FECHA DE RECEPCIÓN"] = "last"
                 cols_resumen.append("FECHA DE RECEPCIÓN")
 
-            resumen = (
-                df_filtrado
-                .groupby("ID_REQ", as_index=False)
-                .agg(agg_dict)
-            )
+            resumen = df_filtrado.groupby("ID_REQ", as_index=False).agg(agg_dict)
 
-            st.markdown("### 🗂 Resumen de requerimiento de compra ")
+            st.markdown("### 🗂 Resumen de requerimiento de compra")
             st.dataframe(
                 resumen[cols_resumen].reset_index(drop=True),
                 use_container_width=True,
-                hide_index=True
+                hide_index=True,
             )
 
-            # ---------- Detalle SOLO si se buscó un folio ----------
             if filtro_folio:
                 st.markdown(f"### 📄 Detalle de productos del folio: `{filtro_folio}`")
-
                 detalle = df_filtrado.copy()
 
-                cols_detalle = [c for c in [
-                    "ID_REQ",
-                    "INSUMO",
-                    "UNIDAD DE MEDIDA",
-                    "CANTIDAD",
-                    "FECHA DE RECEPCIÓN" if "FECHA DE RECEPCIÓN" in detalle.columns else None,
-                    "FACTURA",
-                    "ESTATUS",
-                    "OBSERVACIONES",
-                ] if c is not None and c in detalle.columns]
+                cols_detalle = [
+                    c
+                    for c in [
+                        "ID_REQ",
+                        "INSUMO",
+                        "UNIDAD DE MEDIDA",
+                        "CANTIDAD",
+                        "FECHA DE RECEPCIÓN"
+                        if "FECHA DE RECEPCIÓN" in detalle.columns
+                        else None,
+                        "FACTURA",
+                        "ESTATUS",
+                        "OBSERVACIONES",
+                    ]
+                    if c is not None and c in detalle.columns
+                ]
 
                 st.dataframe(
                     detalle[cols_detalle].reset_index(drop=True),
                     use_container_width=True,
-                    hide_index=True
+                    hide_index=True,
                 )
 
         except Exception as e:
