@@ -600,6 +600,21 @@ def load_catalogo_productos() -> pd.DataFrame:
 
     return df
 
+def norm(s: str) -> str:
+    """
+    Normaliza nombres de columnas:
+    - quita espacios
+    - pasa a minúsculas
+    - elimina guiones bajos
+    """
+    return (
+        str(s)
+        .strip()
+        .lower()
+        .replace(" ", "")
+        .replace("_", "")
+    )
+
 
 @st.cache_data
 def load_requerimientos_from_gsheet() -> pd.DataFrame:
@@ -607,26 +622,37 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
     if not url:
         raise ValueError("No se encontró REQUERIMIENTOS_CSV_URL en secrets.")
 
+    # Leer CSV publicado desde Google Sheets
     try:
         df = pd.read_csv(url)
     except pd.errors.ParserError:
         df = pd.read_csv(url, engine="python", on_bad_lines="skip")
 
+    # Normalizar nombres clave para que siempre tengamos estas columnas:
+    #   ID_REQ, ESTATUS, FECHA DE PEDIDO, FECHA DESEADA, FECHA DE REQUSICIÓN, CECO_DESTINO
     rename_map = {}
     for col in df.columns:
         n = norm(col)
+
         if n == "idreq":
             rename_map[col] = "ID_REQ"
+
         elif n == "estatus":
             rename_map[col] = "ESTATUS"
+
         elif n in ("fechadepedido", "fechapedido"):
             rename_map[col] = "FECHA DE PEDIDO"
-        # ahora la fecha de entrega se llama FECHA DESEADA
-        elif n in ("fechadeseada", "fechaderecepcion", "fechaderecepción"):
+
+        # aquí mapeamos tanto FECHA DESEADA como versiones viejas de recepción
+        elif n in ("fechadeseada", "fechaderecepcion", "fechaderecepción", "fechaentrega"):
             rename_map[col] = "FECHA DESEADA"
-        # la fecha de requisición nueva
-        elif n in ("fechaderequsición", "fechaderequisicion"):
+
+        # tu nueva columna "FECHA DE REQUSICIÓN"
+        elif n in ("fechaderequsición", "fechaderequisicion", "fecharequisicion"):
             rename_map[col] = "FECHA DE REQUSICIÓN"
+
+        elif n in ("cecodestino", "ceco_destino"):
+            rename_map[col] = "CECO_DESTINO"
 
     df = df.rename(columns=rename_map)
     df.columns = df.columns.astype(str).str.strip()
