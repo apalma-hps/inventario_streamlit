@@ -60,9 +60,6 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-    /* =========================
-       FONDO GENERAL / LAYOUT
-       ========================= */
     body {
         background: #E5F3FF !important;
     }
@@ -73,7 +70,6 @@ st.markdown(
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    /* Barra superior de Streamlit (para quitar franja negra) */
     header[data-testid="stHeader"] {
         background: transparent !important;
     }
@@ -85,9 +81,6 @@ st.markdown(
         padding-top: 1rem !important;
     }
 
-    /* =========================
-       SIDEBAR
-       ========================= */
     section[data-testid="stSidebar"] {
         background-color: #FFFFFF !important;
         border-right: 1px solid #E5E7EB !important;
@@ -96,9 +89,6 @@ st.markdown(
         color: #0F172A !important;
     }
 
-    /* =========================
-       TIPOGRAFÍA
-       ========================= */
     h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
         color: #0F172A !important;
         font-weight: 700 !important;
@@ -112,9 +102,6 @@ st.markdown(
         color: #0F172A !important;
     }
 
-    /* =========================
-       ENLACES
-       ========================= */
     a {
         color: #06B6D4 !important;
         text-decoration: none !important;
@@ -124,9 +111,6 @@ st.markdown(
         text-decoration: underline !important;
     }
 
-    /* =========================
-       BOTONES
-       ========================= */
     button[kind="primary"],
     button[kind="secondary"],
     button[data-testid^="baseButton"] {
@@ -143,7 +127,6 @@ st.markdown(
         background: linear-gradient(135deg, #0891B2, #16A34A) !important;
     }
 
-    /* Botones +/- de number_input */
     [data-testid="stNumberInput"] button {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
@@ -152,9 +135,6 @@ st.markdown(
         box-shadow: none !important;
     }
 
-    /* =========================
-       INPUTS
-       ========================= */
     input,
     .stTextInput > div > input,
     .stNumberInput input,
@@ -173,7 +153,6 @@ st.markdown(
         border-color: #06B6D4 !important;
     }
 
-    /* Date input */
     [data-testid="stDateInput"] input {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
@@ -181,7 +160,6 @@ st.markdown(
         border-radius: 0.75rem !important;
     }
 
-    /* Selects cerrados */
     div[data-baseweb="select"] > div {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
@@ -192,7 +170,6 @@ st.markdown(
         color: #64748B !important;
     }
 
-    /* Menú desplegable de select (BaseWeb) */
     [data-baseweb="menu"],
     [data-baseweb="popover"] [data-baseweb="menu"] {
         background-color: #FFFFFF !important;
@@ -220,9 +197,6 @@ st.markdown(
         color: #0F172A !important;
     }
 
-    /* =========================
-       TABLAS / DATAFRAMES
-       ========================= */
     .dataframe {
         background-color: #FFFFFF !important;
         color: #0F172A !important;
@@ -260,9 +234,6 @@ st.markdown(
         background-color: #F1F5F9 !important;
     }
 
-    /* =========================
-       MÉTRICAS
-       ========================= */
     [data-testid="stMetric"] {
         background-color: #FFFFFF !important;
         border-radius: 1.5rem !important;
@@ -271,9 +242,6 @@ st.markdown(
         border: 1px solid rgba(148, 163, 184, 0.25) !important;
     }
 
-    /* =========================
-       ALERTAS
-       ========================= */
     .stSuccess {
         background-color: #ECFDF5 !important;
         color: #16A34A !important;
@@ -401,6 +369,27 @@ REQUERIMIENTOS_COLUMNS = [
     "CATEGORIA",
 ]
 
+# --------------------------------------------------
+# Columnas en la hoja de Recepción
+# --------------------------------------------------
+RECEPCION_COLUMNS = [
+    "Fecha de recepción",
+    "PROVEEDOR",
+    "FACTURA / TICKET",
+    "SKU",
+    "PRODUCTO",
+    "UNIDAD DE MEDIDA",
+    "CANTIDAD PO",
+    "CANTIDAD RECIBIDA",
+    "TEMP (°C)",
+    "CALIDAD (OK / RECHAZO)",
+    "OBSERVACIONES",
+    "RECIBIÓ",
+    "FOLIO",
+    "APROBÓ",
+    "ID DE REQUERIMIENTO AL QUE CORRESPONDE",
+    "Folio Generado de Recepcion",
+]
 
 # --------------------------------------------------
 # Inicializar session_state
@@ -416,6 +405,15 @@ if "ultimo_inventario_hora" not in st.session_state:
 
 if "carrito_req" not in st.session_state:
     st.session_state["carrito_req"] = []
+
+if "carrito_recepcion" not in st.session_state:
+    st.session_state["carrito_recepcion"] = []
+
+if "req_recepcion_df" not in st.session_state:
+    st.session_state["req_recepcion_df"] = None
+
+if "req_recepcion_id" not in st.session_state:
+    st.session_state["req_recepcion_id"] = ""
 
 # --------------------------------------------------
 # Funciones auxiliares – Inventario
@@ -582,23 +580,39 @@ def load_catalogo_productos() -> pd.DataFrame:
     if "Producto" not in df.columns:
         raise ValueError("La hoja Catalogo_Productos no contiene la columna 'Producto'.")
 
+    cols = []
+
     if "Categoria" in df.columns:
-        df = df[["Categoria", "Producto"]].copy()
-    else:
-        df = df[["Producto"]].copy()
-        df["Categoria"] = "Sin categoría"
+        cols.append("Categoria")
+
+    cols.append("Producto")
+
+    if "Referencia Interna" in df.columns:
+        cols.append("Referencia Interna")
+
+    df = df[cols].copy()
 
     df = df[df["Producto"].notna()]
-
     df["Producto"] = df["Producto"].astype(str).str.strip()
-    df["Categoria"] = df["Categoria"].astype(str).str.strip()
+
+    if "Categoria" in df.columns:
+        df["Categoria"] = df["Categoria"].astype(str).str.strip()
+    else:
+        df["Categoria"] = "Sin categoría"
+
+    if "Referencia Interna" in df.columns:
+        df["Referencia Interna"] = df["Referencia Interna"].astype(str).str.strip()
 
     df = df[
         (df["Producto"] != "") &
         (df["Producto"].str.lower() != "nan")
     ].reset_index(drop=True)
 
+    # Llave normalizada para posibles merges futuros
+    df["PRODUCTO_KEY"] = df["Producto"].apply(lambda s: norm_producto(s))
+
     return df
+
 
 def norm(s: str) -> str:
     """
@@ -616,20 +630,32 @@ def norm(s: str) -> str:
     )
 
 
+def norm_producto(s: str) -> str:
+    """
+    Normaliza nombre de producto para matching robusto:
+    - str
+    - strip
+    - lower
+    - colapsa espacios internos
+    """
+    if pd.isna(s):
+        return ""
+    s = str(s).strip().lower()
+    s = " ".join(s.split())
+    return s
+
+
 @st.cache_data
 def load_requerimientos_from_gsheet() -> pd.DataFrame:
     url = st.secrets.get("REQUERIMIENTOS_CSV_URL", "")
     if not url:
         raise ValueError("No se encontró REQUERIMIENTOS_CSV_URL en secrets.")
 
-    # Leer CSV publicado desde Google Sheets
     try:
         df = pd.read_csv(url)
     except pd.errors.ParserError:
         df = pd.read_csv(url, engine="python", on_bad_lines="skip")
 
-    # Normalizar nombres clave para que siempre tengamos estas columnas:
-    #   ID_REQ, ESTATUS, FECHA DE PEDIDO, FECHA DESEADA, FECHA DE REQUSICIÓN, CECO_DESTINO
     rename_map = {}
     for col in df.columns:
         n = norm(col)
@@ -643,11 +669,9 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
         elif n in ("fechadepedido", "fechapedido"):
             rename_map[col] = "FECHA DE PEDIDO"
 
-        # aquí mapeamos tanto FECHA DESEADA como versiones viejas de recepción
         elif n in ("fechadeseada", "fechaderecepcion", "fechaderecepción", "fechaentrega"):
             rename_map[col] = "FECHA DESEADA"
 
-        # tu nueva columna "FECHA DE REQUSICIÓN"
         elif n in ("fechaderequsición", "fechaderequisicion", "fecharequisicion"):
             rename_map[col] = "FECHA DE REQUSICIÓN"
 
@@ -659,10 +683,38 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
 
     return df
 
+
+@st.cache_data
+def load_recepcion_from_gsheet() -> pd.DataFrame:
+    """
+    Lee la hoja Recepción publicada como CSV.
+    """
+    url = st.secrets.get("RECEPCION_CSV_URL", "")
+    if not url:
+        raise ValueError("No se encontró RECEPCION_CSV_URL en secrets.")
+
+    try:
+        df = pd.read_csv(url)
+    except pd.errors.ParserError:
+        df = pd.read_csv(url, engine="python", on_bad_lines="skip")
+
+    df.columns = df.columns.astype(str).str.strip()
+    return df
+
+
 def generar_folio_requerimiento() -> (str, str, str):
     tz = pytz.timezone("America/Mexico_City")
     ahora = datetime.now(tz)
     folio = ahora.strftime("REQ-%Y%m%d-%H%M%S")
+    fecha = ahora.date().isoformat()
+    hora = ahora.strftime("%H:%M:%S")
+    return folio, fecha, hora
+
+
+def generar_folio_recepcion() -> (str, str, str):
+    tz = pytz.timezone("America/Mexico_City")
+    ahora = datetime.now(tz)
+    folio = ahora.strftime("REC-%Y%m%d-%H%M%S")
     fecha = ahora.date().isoformat()
     hora = ahora.strftime("%H:%M:%S")
     return folio, fecha, hora
@@ -710,7 +762,53 @@ def enviar_requerimientos_a_gsheet(lista_req_data):
         st.exception(e)
 
 
-def enviar_nuevo_producto_a_catalogo(nombre: str):
+def enviar_recepcion_a_gsheet(lista_recepcion_data):
+    """
+    Envía las filas de recepción a la hoja 'Recepción' en Google Sheets vía Apps Script.
+    """
+    url = st.secrets.get("APPS_SCRIPT_RECEPCION_URL", "")
+
+    if not url:
+        st.warning(
+            "No se configuró APPS_SCRIPT_RECEPCION_URL en secrets. "
+            "La recepción NO se enviará a la hoja 'Recepción'."
+        )
+        return
+
+    rows = []
+    for rec_data in lista_recepcion_data:
+        row = [rec_data.get(col, "") for col in RECEPCION_COLUMNS]
+        rows.append(row)
+
+    payload = {"rows": rows}
+
+    try:
+        resp = requests.post(url, json=payload, timeout=10)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except Exception:
+                data = {}
+            if data.get("status") == "ok":
+                st.success(
+                    f"Recepción registrada correctamente. "
+                    f"Filas insertadas: {data.get('inserted', 'desconocido')}."
+                )
+            else:
+                st.warning(
+                    "Apps Script respondió pero con estado distinto de 'ok'. "
+                    f"Respuesta: {data}"
+                )
+        else:
+            st.error(
+                f"No se pudo registrar la recepción. Código HTTP: {resp.status_code}"
+            )
+    except Exception as e:
+        st.error("Error al enviar la recepción a Google Sheets.")
+        st.exception(e)
+
+
+def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
     url = st.secrets.get("APPS_SCRIPT_CATALOGO_URL", "")
     if not url:
         st.warning(
@@ -719,14 +817,19 @@ def enviar_nuevo_producto_a_catalogo(nombre: str):
         )
         return
 
+    if categoria is None or str(categoria).strip() == "":
+        categoria = "Sin categoría"
+
     payload = {
         "accion": "nuevo_producto",
         "producto": nombre,
+        "categoria": categoria,
     }
 
     try:
         resp = requests.post(url, json=payload, timeout=10)
         if resp.status_code == 200:
+            # Opcionalmente podrías leer resp.json() y mostrar si exists = true
             st.success("Nuevo producto enviado para agregarlo al catálogo.")
         else:
             st.error(
@@ -746,6 +849,7 @@ vista = st.sidebar.radio(
         # "📥 Carga de Inventario",
         # "📊 Consulta último inventario cargado",
         "📨 Requerimientos de producto",
+        "📥 Recepción",
         "❓ FAQs",
     ),
 )
@@ -773,143 +877,6 @@ if vista == "❓ FAQs":
         "5) Verifica los productos agregados y cantidades nuevamente, da clic en **Confirmar y enviar requerimiento**.\n"
         "6) Anota el folio generado para futuras consultas.\n"
     )
-
-# --------------------------------------------------
-# VISTA 1: Carga de inventario (oculta por ahora)
-# --------------------------------------------------
-if vista == "📥 Carga de Inventario":
-    st.header("📥 Carga de Inventario")
-
-    st.subheader("1. Estructura base desde Google Sheets (solo lectura)")
-    try:
-        plantilla_gsheet_df = load_movimientos_template_from_gsheet()
-        st.success("Plantilla cargada correctamente desde Google Sheets (solo headers).")
-        with st.expander("Ver columnas detectadas en Movimientos_Inventario"):
-            st.dataframe(plantilla_gsheet_df, use_container_width=True)
-    except Exception as e:
-        st.error(
-            "No se pudo cargar la plantilla desde Google Sheets. "
-            "Revisa la URL en secrets y los permisos/publicación de la hoja."
-        )
-        st.exception(e)
-        st.stop()
-
-    st.subheader("2. Descargar plantilla de inventario")
-    st.write(
-        "Descarga la plantilla. Incluye la hoja **Movimientos_Inventario** y **Catalogo_Productos**."
-    )
-    st.markdown(
-        f"[⬇️ Descargar plantilla de inventario (Excel con productos y fórmulas)]({PLANTILLA_INVENTARIO_XLSX_URL})",
-        unsafe_allow_html=True,
-    )
-
-    st.subheader("3. Subir archivo con movimientos llenos y procesar")
-    uploaded_file = st.file_uploader(
-        "Sube tu archivo de movimientos (basado en la plantilla – Excel o CSV)",
-        type=["xlsx", "xls", "csv"],
-    )
-
-    if uploaded_file is not None:
-        st.write(f"Archivo cargado: **{uploaded_file.name}**")
-        try:
-            mov_df = leer_archivo_movimientos(uploaded_file)
-            st.markdown("### Vista previa del archivo cargado (primeras filas)")
-            st.dataframe(mov_df.head(), use_container_width=True)
-
-            mov_df = validar_y_ordenar_columnas(mov_df)
-
-            cantidades = pd.to_numeric(mov_df["Cantidad"], errors="coerce").fillna(0)
-            filtrado_df = mov_df[cantidades > 0].copy()
-
-            st.write(f"Filas con **Cantidad > 0**: **{len(filtrado_df)}**")
-
-            if len(filtrado_df) > 0:
-                folio, fecha, hora = generar_folio_inventario()
-                filtrado_df = agregar_campos_sistema(filtrado_df, folio, fecha, hora)
-
-                st.markdown("### Movimientos filtrados (solo con Cantidad > 0)")
-                st.dataframe(filtrado_df, use_container_width=True)
-
-                st.info(
-                    f"Folio de inventario generado (ID de la carga): **{folio}**\n\n"
-                    f"Fecha de carga: **{fecha}**  \n"
-                    f"Hora de carga: **{hora}**"
-                )
-
-                st.session_state["ultimo_inventario_df"] = filtrado_df
-                st.session_state["ultimo_inventario_folio"] = folio
-                st.session_state["ultimo_inventario_fecha"] = fecha
-                st.session_state["ultimo_inventario_hora"] = hora
-
-                enviar_a_consolidado(filtrado_df)
-
-                resultado_excel = df_to_excel_bytes(
-                    filtrado_df, sheet_name="Movimientos_Procesados"
-                )
-
-                st.download_button(
-                    label="⬇️ Descargar movimientos procesados (Excel consolidado)",
-                    data=resultado_excel,
-                    file_name=f"movimientos_inventario_{folio}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            else:
-                st.warning(
-                    "No se encontraron filas con **Cantidad > 0**. "
-                    "Revisa que hayas capturado cantidades en la columna 'Cantidad'."
-                )
-
-        except Exception as e:
-            st.error("Ocurrió un error al leer o procesar el archivo subido.")
-            st.exception(e)
-
-# --------------------------------------------------
-# VISTA 2: Último inventario cargado (oculta por ahora)
-# --------------------------------------------------
-elif vista == "📊 Consulta último inventario cargado":
-    st.header("📊 Consulta último inventario cargado")
-
-    ultimo_df = st.session_state["ultimo_inventario_df"]
-    folio = st.session_state["ultimo_inventario_folio"]
-    fecha = st.session_state["ultimo_inventario_fecha"]
-    hora = st.session_state["ultimo_inventario_hora"]
-
-    if ultimo_df is None:
-        st.warning(
-            "Aún no se ha cargado ningún inventario en esta sesión.\n\n"
-            "Ve a la vista **'📥 Carga de Inventario'**, procesa un archivo "
-            "y luego regresa aquí para ver el último inventario consolidado."
-        )
-    else:
-        st.info(
-            f"**Folio de inventario (ID de la carga):** {folio}\n\n"
-            f"**Fecha de carga:** {fecha}  \n"
-            f"**Hora de carga:** {hora}  \n"
-            f"**Registros:** {len(ultimo_df)}"
-        )
-
-        st.markdown("### Detalle del último inventario consolidado")
-        st.dataframe(ultimo_df, use_container_width=True)
-
-        with st.expander("Ver resumen por SKU (suma de Cantidad)"):
-            resumen_sku = (
-                ultimo_df
-                .groupby(["SKU", "Producto"], as_index=False)["Cantidad"]
-                .sum()
-                .sort_values("Cantidad", ascending=False)
-            )
-            st.dataframe(resumen_sku, use_container_width=True)
-
-        resultado_excel = df_to_excel_bytes(
-            ultimo_df, sheet_name="Ultimo_Inventario"
-        )
-
-        st.download_button(
-            label="⬇️ Descargar último inventario (Excel)",
-            data=resultado_excel,
-            file_name=f"ultimo_inventario_{folio}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
 
 # --------------------------------------------------
 # VISTA 3: Requerimientos de producto (con carrito)
@@ -1045,7 +1012,8 @@ elif vista == "📨 Requerimientos de producto":
                 else:
                     categoria_item = "Sin categoría"
                 if producto_final:
-                    enviar_nuevo_producto_a_catalogo(producto_final)
+                    enviar_nuevo_producto_a_catalogo(producto_final, categoria_item)
+
             else:
                 mask = (
                     productos_df["Producto"]
@@ -1103,14 +1071,14 @@ elif vista == "📨 Requerimientos de producto":
                 header_cols[4].markdown("**Borrar**")
 
                 for _, row in subset.iterrows():
-                    c1, c2, c3, c4, c5 = st.columns([4, 2, 2, 4, 1])
+                    c1, c2, c3, c4, c5_columns = st.columns([4, 2, 2, 4, 1])
                     c1.write(row.get("INSUMO", ""))
                     c2.write(row.get("UNIDAD DE MEDIDA", ""))
                     c3.write(row.get("CANTIDAD", ""))
                     c4.write(row.get("Observaciones", ""))
 
                     delete_key = f"del_{int(row['__idx__'])}"
-                    if c5.button("❌", key=delete_key):
+                    if c5_columns.button("❌", key=delete_key):
                         st.session_state["carrito_req"].pop(int(row["__idx__"]))
                         st.rerun()
         else:
@@ -1122,14 +1090,14 @@ elif vista == "📨 Requerimientos de producto":
             header_cols[4].markdown("**Borrar**")
 
             for _, row in carrito_df.iterrows():
-                c1, c2, c3, c4, c5 = st.columns([4, 2, 2, 4, 1])
+                c1, c2, c3, c4, c5_columns = st.columns([4, 2, 2, 4, 1])
                 c1.write(row.get("INSUMO", ""))
                 c2.write(row.get("UNIDAD DE MEDIDA", ""))
                 c3.write(row.get("CANTIDAD", ""))
                 c4.write(row.get("Observaciones", ""))
 
                 delete_key = f"del_{int(row['__idx__'])}"
-                if c5.button("❌", key=delete_key):
+                if c5_columns.button("❌", key=delete_key):
                     st.session_state["carrito_req"].pop(int(row["__idx__"]))
                     st.rerun()
 
@@ -1163,19 +1131,19 @@ elif vista == "📨 Requerimientos de producto":
 
                 for item in st.session_state["carrito_req"]:
                     req_data = {
-                        "FECHA DE PEDIDO": fecha_creacion,  # fecha en que se levanta el req
-                        "PROVEDOR": proveedor,  # de momento vacío
+                        "FECHA DE PEDIDO": fecha_creacion,
+                        "PROVEDOR": proveedor,
                         "INSUMO": item["INSUMO"],
                         "UNIDAD DE MEDIDA": item["UNIDAD DE MEDIDA"],
-                        "COSTO UNIDAD": "",  # lo llenas después en Sheets
+                        "COSTO UNIDAD": "",
                         "CANTIDAD": item["CANTIDAD"],
-                        "COSTO TOTAL": "",  # lo puedes formular en Sheets
-                        "FECHA DESEADA": fecha_requerida.isoformat(),  # antes era FECHA DE RECEPCIÓN
+                        "COSTO TOTAL": "",
+                        "FECHA DESEADA": fecha_requerida.isoformat(),
                         "FACTURA": "",
                         "OBSERVACIONES": item["Observaciones"],
                         "ESTATUS": "Pendiente",
                         "ID_REQ": folio_req,
-                        "FECHA DE REQUSICIÓN": fecha_creacion,  # nueva columna en tu Sheet
+                        "FECHA DE REQUSICIÓN": fecha_creacion,
                         "Hora": hora_creacion,
                         "CECO_DESTINO": ceco_destino,
                         "CATEGORIA": item.get("Categoria", "Sin categoría"),
@@ -1197,7 +1165,7 @@ elif vista == "📨 Requerimientos de producto":
     # ---------- 3) Consulta de estatus ----------
     st.subheader("🔍 Consultar estatus de requerimientos")
 
-    col_f1, col_f2 = st.columns(2)
+    _, col_f2 = st.columns(2)
     filtro_folio = col_f2.text_input(
         "Buscar por folio (ID_REQ) (opcional, coincidencia parcial)",
         value="",
@@ -1291,3 +1259,498 @@ elif vista == "📨 Requerimientos de producto":
                 "Revisa REQUERIMIENTOS_CSV_URL en secrets y la publicación del archivo."
             )
             st.exception(e)
+
+# --------------------------------------------------
+# VISTA: Recepción de producto
+# --------------------------------------------------
+elif vista == "📥 Recepción":
+    st.header("📥 Recepción de producto")
+
+    st.markdown(
+        "1) Consulta un requerimiento por folio **ID_REQ**.  \n"
+        "2) Revisa los productos solicitados.  \n"
+        "3) Registra lo efectivamente recibido en la hoja **'Recepción'**."
+    )
+
+    # Cargamos catálogo (por si luego quieres usarlo para lógica adicional)
+    try:
+        catalogo_df = load_catalogo_productos()
+    except Exception as e:
+        st.error("No se pudo cargar el catálogo de productos.")
+        st.exception(e)
+        catalogo_df = pd.DataFrame()
+
+    # ---------- 1) Buscar requerimiento por folio ----------
+    col_buscar1, col_buscar2 = st.columns([2, 1])
+    id_req_input = col_buscar1.text_input(
+        "Folio de requerimiento (ID_REQ)",
+        value=st.session_state.get("req_recepcion_id", ""),
+        help="Es el mismo folio que se generó en Requerimientos (REQ-YYYYMMDD-HHMMSS).",
+    )
+    btn_buscar_req = col_buscar2.button("🔍 Buscar requerimiento")
+
+    if btn_buscar_req:
+        if not id_req_input.strip():
+            st.error("Debes capturar un folio de requerimiento (ID_REQ).")
+        else:
+            try:
+                req_df = load_requerimientos_from_gsheet()
+
+                if "ID_REQ" not in req_df.columns:
+                    st.error(
+                        "No se encontró la columna 'ID_REQ' en la hoja de requerimientos. "
+                        f"Columnas leídas: {list(req_df.columns)}"
+                    )
+                    st.stop()
+
+                mask = req_df["ID_REQ"].astype(str).str.strip() == id_req_input.strip()
+                df_req_folio = req_df[mask].copy()
+
+                if df_req_folio.empty:
+                    st.warning(
+                        f"No se encontraron registros con el folio ID_REQ = '{id_req_input}'."
+                    )
+                    st.session_state["req_recepcion_df"] = None
+                    st.session_state["req_recepcion_id"] = id_req_input.strip()
+                else:
+                    if "INSUMO" in df_req_folio.columns:
+                        df_req_folio = df_req_folio.sort_values("INSUMO")
+
+                    st.session_state["req_recepcion_df"] = df_req_folio
+                    st.session_state["req_recepcion_id"] = id_req_input.strip()
+                    st.success("Requerimiento cargado correctamente.")
+            except Exception as e:
+                st.error(
+                    "No se pudo cargar la hoja de requerimientos desde Google Sheets. "
+                    "Revisa REQUERIMIENTOS_CSV_URL en secrets y la publicación del archivo."
+                )
+                st.exception(e)
+
+    df_req_folio = st.session_state.get("req_recepcion_df", None)
+    id_req_actual = st.session_state.get("req_recepcion_id", "")
+
+    # ---------- 2) Mostrar productos del requerimiento ----------
+    if df_req_folio is not None and not df_req_folio.empty:
+        st.markdown("### 🧾 Productos del requerimiento")
+
+        cols_detalle_req = [
+            c
+            for c in [
+                "INSUMO",
+                "UNIDAD DE MEDIDA",
+                "CANTIDAD",
+                "FECHA DE PEDIDO" if "FECHA DE PEDIDO" in df_req_folio.columns else None,
+                "FECHA DESEADA" if "FECHA DESEADA" in df_req_folio.columns else None,
+                "CECO_DESTINO" if "CECO_DESTINO" in df_req_folio.columns else None,
+            ]
+            if c is not None and c in df_req_folio.columns
+        ]
+
+        st.dataframe(
+            df_req_folio[cols_detalle_req].reset_index(drop=True),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # ---------- 3) Datos generales de la recepción ----------
+        st.markdown("### 📋 Datos generales de la recepción")
+
+        colg1, colg2 = st.columns(2)
+        fecha_recepcion = colg1.date_input(
+            "Fecha de recepción",
+            value=date.today(),
+        )
+
+        proveedor_default = ""
+        if "PROVEDOR" in df_req_folio.columns:
+            proveedores_no_vacios = df_req_folio["PROVEDOR"].dropna()
+            if not proveedores_no_vacios.empty:
+                proveedor_default = str(proveedores_no_vacios.iloc[0])
+
+        proveedor = colg1.text_input(
+            "PROVEEDOR",
+            value=proveedor_default,
+        )
+
+        factura_ticket = colg2.text_input(
+            "FACTURA / TICKET",
+            value="",
+        )
+
+        colg3, colg4 = st.columns(2)
+        recibio = colg3.text_input(
+            "RECIBIÓ",
+            value="",
+            help="Persona que físicamente recibe el producto.",
+        )
+        aprobo = colg4.text_input(
+            "APROBÓ",
+            value="",
+            help="Persona que aprueba la recepción (opcional).",
+        )
+
+        # ---------- 4) Agregar líneas de recepción ----------
+        st.markdown("### 📦 Agregar líneas de recepción")
+
+        insumos_unicos = (
+            sorted(df_req_folio["INSUMO"].dropna().astype(str).unique().tolist())
+            if "INSUMO" in df_req_folio.columns
+            else []
+        )
+
+        insumo_sel = st.selectbox(
+            "Producto (INSUMO) solicitado",
+            ["--- Selecciona un producto ---"] + insumos_unicos,
+            key="insumo_recep_sel",
+        )
+
+        # Defaults desde el requerimiento
+        unidad_default = "pz"
+        cantidad_po_default = 0.0
+        if (
+            insumo_sel != "--- Selecciona un producto ---"
+            and "INSUMO" in df_req_folio.columns
+        ):
+            mask_insumo = (
+                df_req_folio["INSUMO"].astype(str).str.strip()
+                == insumo_sel.strip()
+            )
+
+            if "UNIDAD DE MEDIDA" in df_req_folio.columns and mask_insumo.any():
+                unidad_default = str(
+                    df_req_folio.loc[mask_insumo, "UNIDAD DE MEDIDA"].iloc[0]
+                )
+
+            if "CANTIDAD" in df_req_folio.columns and mask_insumo.any():
+                cantidad_po_default = float(
+                    df_req_folio.loc[mask_insumo, "CANTIDAD"].sum()
+                )
+
+        colp3, colp4, colp5 = st.columns(3)
+        unidad_medida = colp3.text_input(
+            "UNIDAD DE MEDIDA",
+            value=unidad_default,
+        )
+        cantidad_po = colp4.number_input(
+            "CANTIDAD PO (solicitada en el requerimiento)",
+            min_value=0.0,
+            value=float(cantidad_po_default),
+            step=1.0,
+        )
+        cantidad_recibida = colp5.number_input(
+            "CANTIDAD RECIBIDA",
+            min_value=0.0,
+            value=float(cantidad_po_default),
+            step=1.0,
+        )
+
+        colt1, colt2 = st.columns(2)
+        temp_rec = colt1.number_input(
+            "TEMP (°C)",
+            min_value=-50.0,
+            max_value=100.0,
+            value=0.0,
+            step=0.5,
+        )
+        calidad = colt2.selectbox(
+            "CALIDAD (OK / RECHAZO)",
+            ["OK", "RECHAZO"],
+            index=0,
+        )
+
+        observaciones_recep = st.text_area(
+            "OBSERVACIONES para esta línea "
+            "(obligatorias si no se recibió nada o hay rechazo)",
+            value="",
+        )
+
+        col_btn_add, _ = st.columns(2)
+        btn_add_line_recep = col_btn_add.button("➕ Agregar línea de recepción")
+
+        if btn_add_line_recep:
+            errores = []
+
+            if insumo_sel == "--- Selecciona un producto ---":
+                errores.append("Debes seleccionar un producto del requerimiento.")
+
+            if cantidad_po <= 0:
+                errores.append("La *CANTIDAD PO* debe ser mayor a 0.")
+
+            if (cantidad_recibida <= 0 or calidad == "RECHAZO") and not observaciones_recep.strip():
+                errores.append(
+                    "Cuando la *CANTIDAD RECIBIDA* es 0 o la calidad es RECHAZO, "
+                    "es obligatorio capturar OBSERVACIONES."
+                )
+
+            if errores:
+                st.error("No se pudo agregar la línea de recepción:")
+                for e in errores:
+                    st.write("-", e)
+            else:
+                item_recep = {
+                    "Fecha de recepción": fecha_recepcion.isoformat(),
+                    "PROVEEDOR": proveedor,
+                    "FACTURA / TICKET": factura_ticket,
+                    "SKU": "",  # no se captura en el formulario
+                    "PRODUCTO": insumo_sel,
+                    "UNIDAD DE MEDIDA": unidad_medida,
+                    "CANTIDAD PO": cantidad_po,
+                    "CANTIDAD RECIBIDA": cantidad_recibida,
+                    "TEMP (°C)": temp_rec,
+                    "CALIDAD (OK / RECHAZO)": calidad,
+                    "OBSERVACIONES": observaciones_recep,
+                    "RECIBIÓ": recibio,
+                    "FOLIO": "",
+                    "APROBÓ": aprobo,
+                    "ID DE REQUERIMIENTO AL QUE CORRESPONDE": id_req_actual,
+                    "Folio Generado de Recepcion": "",
+                }
+
+                st.session_state["carrito_recepcion"].append(item_recep)
+                st.success(
+                    f"Línea de recepción agregada: {insumo_sel} "
+                    f"(PO: {cantidad_po}, Recibido: {cantidad_recibida}, Calidad: {calidad})"
+                )
+
+        # ---------- 5) Carrito de recepción ----------
+        if st.session_state["carrito_recepcion"]:
+            st.markdown("### 🛒 Carrito de recepción")
+
+            carrito_recep_df = pd.DataFrame(st.session_state["carrito_recepcion"])
+            carrito_recep_df["__idx__"] = carrito_recep_df.index
+
+            header_cols = st.columns([3, 2, 2, 2, 2, 3, 1])
+            header_cols[0].markdown("**PRODUCTO**")
+            header_cols[1].markdown("**CANTIDAD PO**")
+            header_cols[2].markdown("**CANTIDAD RECIBIDA**")
+            header_cols[3].markdown("**CALIDAD**")
+            header_cols[4].markdown("**TEMP (°C)**")
+            header_cols[5].markdown("**OBSERVACIONES**")
+            header_cols[6].markdown("**Borrar**")
+
+            for _, row in carrito_recep_df.iterrows():
+                c1, c2, c3, c4, c5, c6, c7 = st.columns([3, 2, 2, 2, 2, 3, 1])
+                c1.write(row.get("PRODUCTO", ""))
+                c2.write(row.get("CANTIDAD PO", ""))
+                c3.write(row.get("CANTIDAD RECIBIDA", ""))
+                c4.write(row.get("CALIDAD (OK / RECHAZO)", ""))
+                c5.write(row.get("TEMP (°C)", ""))
+                c6.write(row.get("OBSERVACIONES", ""))
+
+                delete_key = f"del_recep_{int(row['__idx__'])}"
+                if c7.button("❌", key=delete_key):
+                    st.session_state["carrito_recepcion"].pop(int(row["__idx__"]))
+                    st.rerun()
+
+            colc1, colc2 = st.columns(2)
+            vaciar_recep = colc1.button("🗑️ Vaciar carrito de recepción")
+            btn_enviar_recep = colc2.button("✅ Confirmar y registrar recepción")
+
+            if vaciar_recep:
+                st.session_state["carrito_recepcion"] = []
+                st.info("Carrito de recepción vaciado.")
+
+            if btn_enviar_recep:
+                errores = []
+
+                if not id_req_actual:
+                    errores.append(
+                        "No hay un ID de requerimiento cargado. "
+                        "Vuelve a buscar el folio antes de registrar la recepción."
+                    )
+
+                if not st.session_state["carrito_recepcion"]:
+                    errores.append(
+                        "El carrito de recepción está vacío. Agrega al menos una línea."
+                    )
+
+                if not recibio.strip():
+                    errores.append("Debes capturar la persona que RECIBIÓ.")
+
+                if errores:
+                    st.error("No se pudo registrar la recepción:")
+                    for e in errores:
+                        st.write("-", e)
+                else:
+                    folio_recep, fecha_folio, hora_folio = generar_folio_recepcion()
+                    st.info(
+                        f"Folio de recepción generado: **{folio_recep}**  \n"
+                        f"Fecha de recepción (folio): **{fecha_folio}**  \n"
+                        f"Hora de recepción (folio): **{hora_folio}**"
+                    )
+
+                    lista_recepcion_data = []
+                    for item in st.session_state["carrito_recepcion"]:
+                        rec_data = item.copy()
+                        rec_data["Folio Generado de Recepcion"] = folio_recep
+                        lista_recepcion_data.append(rec_data)
+
+                    enviar_recepcion_a_gsheet(lista_recepcion_data)
+
+                    st.session_state["carrito_recepcion"] = []
+
+    else:
+        st.info(
+            "Busca primero un folio de requerimiento (ID_REQ) para poder registrar la recepción."
+        )
+
+    # ---------- 7) Consulta de pendientes por requerimiento ----------
+    st.markdown("---")
+    st.markdown("### 🔍 Consulta de pendientes por requerimiento")
+
+    id_req_pend = st.text_input(
+        "Folio de requerimiento (ID_REQ) para ver productos pendientes",
+        key="id_req_pendientes",
+        help="Ejemplo: REQ-20251202-153045",
+    )
+
+    if st.button("Calcular pendientes", key="btn_calc_pendientes"):
+        if not id_req_pend.strip():
+            st.error("Debes capturar un folio de requerimiento (ID_REQ).")
+        else:
+            try:
+                req_df = load_requerimientos_from_gsheet()
+                recep_df = load_recepcion_from_gsheet()
+                catalogo_df = load_catalogo_productos()
+
+                if "ID_REQ" not in req_df.columns:
+                    st.error(
+                        "La hoja de Requerimientos no tiene la columna 'ID_REQ'. "
+                        f"Columnas leídas: {list(req_df.columns)}"
+                    )
+                    st.stop()
+
+                req_folio = req_df[
+                    req_df["ID_REQ"].astype(str).str.strip() == id_req_pend.strip()
+                ].copy()
+
+                if req_folio.empty:
+                    st.warning(
+                        f"No se encontraron productos para el ID_REQ = '{id_req_pend}'."
+                    )
+                    st.stop()
+
+                if "INSUMO" in req_folio.columns:
+                    col_prod_req = "INSUMO"
+                elif "PRODUCTO" in req_folio.columns:
+                    col_prod_req = "PRODUCTO"
+                else:
+                    st.error(
+                        "No se encontró una columna de producto ('INSUMO' o 'PRODUCTO') "
+                        "en la hoja de Requerimientos."
+                    )
+                    st.stop()
+
+                if "CANTIDAD" not in req_folio.columns:
+                    st.error("La hoja de Requerimientos no tiene la columna 'CANTIDAD'.")
+                    st.stop()
+
+                req_agrup = (
+                    req_folio.groupby(col_prod_req, as_index=False)["CANTIDAD"]
+                    .sum()
+                    .rename(columns={
+                        col_prod_req: "PRODUCTO",
+                        "CANTIDAD": "CANTIDAD_PO"
+                    })
+                )
+
+                col_id_req_recep = None
+                for c in recep_df.columns:
+                    if norm(c) in (
+                        "idderequerimientoalquecorresponde",
+                        "idrequerimientoalquecorresponde",
+                        "id_de_requerimiento_al_que_corresponde"
+                    ):
+                        col_id_req_recep = c
+                        break
+
+                if col_id_req_recep is None:
+                    if "ID DE REQUERIMIENTO AL QUE CORRESPONDE" in recep_df.columns:
+                        col_id_req_recep = "ID DE REQUERIMIENTO AL QUE CORRESPONDE"
+
+                if col_id_req_recep is None:
+                    st.error(
+                        "No se encontró la columna 'ID DE REQUERIMIENTO AL QUE CORRESPONDE' "
+                        "en la hoja de Recepción."
+                    )
+                    st.stop()
+
+                recep_folio = recep_df[
+                    recep_df[col_id_req_recep].astype(str).str.strip() == id_req_pend.strip()
+                ].copy()
+
+                if recep_folio.empty:
+                    recep_agrup = pd.DataFrame(columns=["PRODUCTO", "CANTIDAD_RECIBIDA"])
+                else:
+                    if "PRODUCTO" in recep_folio.columns:
+                        col_prod_recep = "PRODUCTO"
+                    elif "INSUMO" in recep_folio.columns:
+                        col_prod_recep = "INSUMO"
+                    else:
+                        st.error(
+                            "No se encontró una columna de producto ('PRODUCTO' o 'INSUMO') "
+                            "en la hoja de Recepción."
+                        )
+                        st.stop()
+
+                    if "CANTIDAD RECIBIDA" not in recep_folio.columns:
+                        st.error(
+                            "La hoja de Recepción no tiene la columna 'CANTIDAD RECIBIDA'."
+                        )
+                        st.stop()
+
+                    recep_agrup = (
+                        recep_folio.groupby(col_prod_recep, as_index=False)["CANTIDAD RECIBIDA"]
+                        .sum()
+                        .rename(columns={
+                            col_prod_recep: "PRODUCTO",
+                            "CANTIDAD RECIBIDA": "CANTIDAD_RECIBIDA"
+                        })
+                    )
+
+                pend_df = req_agrup.merge(
+                    recep_agrup,
+                    on="PRODUCTO",
+                    how="left"
+                )
+
+                # --- Forzar a numérico por si vienen como texto del CSV ---
+                pend_df["CANTIDAD_PO"] = pd.to_numeric(
+                    pend_df["CANTIDAD_PO"], errors="coerce"
+                ).fillna(0.0)
+
+                pend_df["CANTIDAD_RECIBIDA"] = pd.to_numeric(
+                    pend_df["CANTIDAD_RECIBIDA"], errors="coerce"
+                ).fillna(0.0)
+
+                pend_df["PENDIENTE"] = pend_df["CANTIDAD_PO"] - pend_df["CANTIDAD_RECIBIDA"]
+
+                # (SKU opcional: podrías cruzar con catalogo_df si más adelante quieres)
+                pend_df["SKU"] = ""
+
+                cols_mostrar = ["SKU", "PRODUCTO", "CANTIDAD_PO", "CANTIDAD_RECIBIDA", "PENDIENTE"]
+                cols_mostrar = [c for c in cols_mostrar if c in pend_df.columns]
+
+                pend_df = pend_df.sort_values("PENDIENTE", ascending=False)
+
+                st.markdown(f"#### Resultado de pendientes para ID_REQ: `{id_req_pend}`")
+                st.dataframe(
+                    pend_df[cols_mostrar].reset_index(drop=True),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                total_po = pend_df["CANTIDAD_PO"].sum()
+                total_rec = pend_df["CANTIDAD_RECIBIDA"].sum()
+                total_pend = pend_df["PENDIENTE"].sum()
+
+                st.info(
+                    f"**Totales del requerimiento**  \n"
+                    f"- Cantidad solicitada (PO): **{total_po:.2f}**  \n"
+                    f"- Cantidad recibida: **{total_rec:.2f}**  \n"
+                    f"- Cantidad pendiente: **{total_pend:.2f}**"
+                )
+
+            except Exception as e:
+                st.error("Ocurrió un error al calcular los pendientes.")
+                st.exception(e)
