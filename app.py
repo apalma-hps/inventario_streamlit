@@ -312,7 +312,7 @@ st.markdown(
 )
 
 # --------------------------------------------------
-# URL de la plantilla de inventario (misma que usas para descarga)
+# URL de la plantilla de inventario
 # --------------------------------------------------
 PLANTILLA_INVENTARIO_XLSX_URL = (
     "https://docs.google.com/spreadsheets/d/e/"
@@ -405,15 +405,17 @@ if "ultimo_inventario_hora" not in st.session_state:
 
 if "carrito_req" not in st.session_state:
     st.session_state["carrito_req"] = []
-
 if "carrito_recepcion" not in st.session_state:
     st.session_state["carrito_recepcion"] = []
 
 if "req_recepcion_df" not in st.session_state:
     st.session_state["req_recepcion_df"] = None
-
 if "req_recepcion_id" not in st.session_state:
     st.session_state["req_recepcion_id"] = ""
+
+# DataFrame editable de recepción
+if "tabla_recepcion_df" not in st.session_state:
+    st.session_state["tabla_recepcion_df"] = None
 
 # --------------------------------------------------
 # Funciones auxiliares – Inventario
@@ -608,19 +610,12 @@ def load_catalogo_productos() -> pd.DataFrame:
         (df["Producto"].str.lower() != "nan")
     ].reset_index(drop=True)
 
-    # Llave normalizada para posibles merges futuros
     df["PRODUCTO_KEY"] = df["Producto"].apply(lambda s: norm_producto(s))
 
     return df
 
 
 def norm(s: str) -> str:
-    """
-    Normaliza nombres de columnas:
-    - quita espacios
-    - pasa a minúsculas
-    - elimina guiones bajos
-    """
     return (
         str(s)
         .strip()
@@ -631,13 +626,6 @@ def norm(s: str) -> str:
 
 
 def norm_producto(s: str) -> str:
-    """
-    Normaliza nombre de producto para matching robusto:
-    - str
-    - strip
-    - lower
-    - colapsa espacios internos
-    """
     if pd.isna(s):
         return ""
     s = str(s).strip().lower()
@@ -662,19 +650,14 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
 
         if n == "idreq":
             rename_map[col] = "ID_REQ"
-
         elif n == "estatus":
             rename_map[col] = "ESTATUS"
-
         elif n in ("fechadepedido", "fechapedido"):
             rename_map[col] = "FECHA DE PEDIDO"
-
         elif n in ("fechadeseada", "fechaderecepcion", "fechaderecepción", "fechaentrega"):
             rename_map[col] = "FECHA DESEADA"
-
         elif n in ("fechaderequsición", "fechaderequisicion", "fecharequisicion"):
             rename_map[col] = "FECHA DE REQUSICIÓN"
-
         elif n in ("cecodestino", "ceco_destino"):
             rename_map[col] = "CECO_DESTINO"
 
@@ -686,9 +669,6 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
 
 @st.cache_data
 def load_recepcion_from_gsheet() -> pd.DataFrame:
-    """
-    Lee la hoja Recepción publicada como CSV.
-    """
     url = st.secrets.get("RECEPCION_CSV_URL", "")
     if not url:
         raise ValueError("No se encontró RECEPCION_CSV_URL en secrets.")
@@ -763,9 +743,6 @@ def enviar_requerimientos_a_gsheet(lista_req_data):
 
 
 def enviar_recepcion_a_gsheet(lista_recepcion_data):
-    """
-    Envía las filas de recepción a la hoja 'Recepción' en Google Sheets vía Apps Script.
-    """
     url = st.secrets.get("APPS_SCRIPT_RECEPCION_URL", "")
 
     if not url:
@@ -829,7 +806,6 @@ def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
     try:
         resp = requests.post(url, json=payload, timeout=10)
         if resp.status_code == 200:
-            # Opcionalmente podrías leer resp.json() y mostrar si exists = true
             st.success("Nuevo producto enviado para agregarlo al catálogo.")
         else:
             st.error(
@@ -846,8 +822,6 @@ def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
 vista = st.sidebar.radio(
     "Selecciona el proceso:",
     (
-        # "📥 Carga de Inventario",
-        # "📊 Consulta último inventario cargado",
         "📨 Requerimientos de producto",
         "📥 Recepción",
         "❓ FAQs",
@@ -879,12 +853,11 @@ if vista == "❓ FAQs":
     )
 
 # --------------------------------------------------
-# VISTA 3: Requerimientos de producto (con carrito)
+# VISTA: Requerimientos de producto (con carrito)
 # --------------------------------------------------
 elif vista == "📨 Requerimientos de producto":
     st.header("📨 Requerimientos de producto")
 
-    # ---------- 1) Catálogo de productos ----------
     try:
         productos_df = load_catalogo_productos()
         st.success("Catálogo de productos cargado exitosamente.")
@@ -896,7 +869,6 @@ elif vista == "📨 Requerimientos de producto":
         st.exception(e)
         st.stop()
 
-    # ---------- 2) Formulario de captura ----------
     st.subheader("📝 Crear nuevo requerimiento (carrito de productos)")
 
     with st.container():
@@ -985,7 +957,6 @@ elif vista == "📨 Requerimientos de producto":
         )
         send_req = False
 
-    # ---------- 2.a) Manejar botón: Agregar producto ----------
     if add_line:
         errores = []
 
@@ -1013,7 +984,6 @@ elif vista == "📨 Requerimientos de producto":
                     categoria_item = "Sin categoría"
                 if producto_final:
                     enviar_nuevo_producto_a_catalogo(producto_final, categoria_item)
-
             else:
                 mask = (
                     productos_df["Producto"]
@@ -1043,7 +1013,6 @@ elif vista == "📨 Requerimientos de producto":
                 f"(Cantidad: {cantidad}, Categoría: {categoria_item})"
             )
 
-    # ---------- Vista del carrito ----------
     if st.session_state["carrito_req"]:
         st.markdown("### 🛒 Carrito de productos del requerimiento actual")
 
@@ -1162,7 +1131,6 @@ elif vista == "📨 Requerimientos de producto":
     else:
         send_req = False
 
-    # ---------- 3) Consulta de estatus ----------
     st.subheader("🔍 Consultar estatus de requerimientos")
 
     _, col_f2 = st.columns(2)
@@ -1261,18 +1229,20 @@ elif vista == "📨 Requerimientos de producto":
             st.exception(e)
 
 # --------------------------------------------------
-# VISTA: Recepción de producto
+# VISTA: Recepción de producto (tabla única)
 # --------------------------------------------------
 elif vista == "📥 Recepción":
     st.header("📥 Recepción de producto")
 
     st.markdown(
         "1) Consulta un requerimiento por folio **ID_REQ**.  \n"
-        "2) Revisa los productos solicitados.  \n"
-        "3) Registra lo efectivamente recibido en la hoja **'Recepción'**."
+        "2) Se cargará una tabla con los insumos del pedido.  \n"
+        "3) En esa misma tabla, por **cada fila** captura: Fecha de recepción, Factura/Ticket, "
+        "Recibió, Cantidad recibida, Temperatura, Calidad y Observaciones.  \n"
+        "4) Registra todo en la hoja **'Recepción'** con un solo botón."
     )
 
-    # Cargamos catálogo (por si luego quieres usarlo para lógica adicional)
+    # (catálogo, por si lo necesitas después, lo dejamos igual)
     try:
         catalogo_df = load_catalogo_productos()
     except Exception as e:
@@ -1329,7 +1299,7 @@ elif vista == "📥 Recepción":
     df_req_folio = st.session_state.get("req_recepcion_df", None)
     id_req_actual = st.session_state.get("req_recepcion_id", "")
 
-    # ---------- 2) Mostrar productos del requerimiento ----------
+    # ---------- 2) Mostrar detalle del requerimiento ----------
     if df_req_folio is not None and not df_req_folio.empty:
         st.markdown("### 🧾 Productos del requerimiento")
 
@@ -1352,203 +1322,104 @@ elif vista == "📥 Recepción":
             hide_index=True,
         )
 
-        # ---------- 3) Datos generales de la recepción ----------
-        st.markdown("### 📋 Datos generales de la recepción")
+        # ---------- 3) Tabla editable: recepción por insumo ----------
+        st.markdown("### 📦 Registro de recepción por insumo")
 
-        colg1, colg2 = st.columns(2)
-        fecha_recepcion = colg1.date_input(
-            "Fecha de recepción",
-            value=date.today(),
-        )
-
-        proveedor_default = ""
-        if "PROVEDOR" in df_req_folio.columns:
-            proveedores_no_vacios = df_req_folio["PROVEDOR"].dropna()
-            if not proveedores_no_vacios.empty:
-                proveedor_default = str(proveedores_no_vacios.iloc[0])
-
-        proveedor = colg1.text_input(
-            "PROVEEDOR",
-            value=proveedor_default,
-        )
-
-        factura_ticket = colg2.text_input(
-            "FACTURA / TICKET",
-            value="",
-        )
-
-        colg3, colg4 = st.columns(2)
-        recibio = colg3.text_input(
-            "RECIBIÓ",
-            value="",
-            help="Persona que físicamente recibe el producto.",
-        )
-        aprobo = colg4.text_input(
-            "APROBÓ",
-            value="",
-            help="Persona que aprueba la recepción (opcional).",
-        )
-
-        # ---------- 4) Agregar líneas de recepción ----------
-        st.markdown("### 📦 Agregar líneas de recepción")
-
-        insumos_unicos = (
-            sorted(df_req_folio["INSUMO"].dropna().astype(str).unique().tolist())
-            if "INSUMO" in df_req_folio.columns
-            else []
-        )
-
-        insumo_sel = st.selectbox(
-            "Producto (INSUMO) solicitado",
-            ["--- Selecciona un producto ---"] + insumos_unicos,
-            key="insumo_recep_sel",
-        )
-
-        # Defaults desde el requerimiento
-        unidad_default = "pz"
-        cantidad_po_default = 0.0
-        if (
-            insumo_sel != "--- Selecciona un producto ---"
-            and "INSUMO" in df_req_folio.columns
-        ):
-            mask_insumo = (
-                df_req_folio["INSUMO"].astype(str).str.strip()
-                == insumo_sel.strip()
+        # Construimos SIEMPRE la base, pero el data_editor mantiene el estado con su key
+        if "INSUMO" not in df_req_folio.columns or "CANTIDAD" not in df_req_folio.columns:
+            st.error(
+                "La hoja de requerimientos debe tener columnas 'INSUMO' y 'CANTIDAD' "
+                "para construir la tabla de recepción."
+            )
+        else:
+            base_df = (
+                df_req_folio.groupby("INSUMO", as_index=False)["CANTIDAD"]
+                .sum()
+                .rename(columns={"INSUMO": "INSUMO", "CANTIDAD": "CANTIDAD PO"})
             )
 
-            if "UNIDAD DE MEDIDA" in df_req_folio.columns and mask_insumo.any():
-                unidad_default = str(
-                    df_req_folio.loc[mask_insumo, "UNIDAD DE MEDIDA"].iloc[0]
-                )
-
-            if "CANTIDAD" in df_req_folio.columns and mask_insumo.any():
-                cantidad_po_default = float(
-                    df_req_folio.loc[mask_insumo, "CANTIDAD"].sum()
-                )
-
-        colp3, colp4, colp5 = st.columns(3)
-        unidad_medida = colp3.text_input(
-            "UNIDAD DE MEDIDA",
-            value=unidad_default,
-        )
-        cantidad_po = colp4.number_input(
-            "CANTIDAD PO (solicitada en el requerimiento)",
-            min_value=0.0,
-            value=float(cantidad_po_default),
-            step=1.0,
-        )
-        cantidad_recibida = colp5.number_input(
-            "CANTIDAD RECIBIDA",
-            min_value=0.0,
-            value=float(cantidad_po_default),
-            step=1.0,
-        )
-
-        colt1, colt2 = st.columns(2)
-        temp_rec = colt1.number_input(
-            "TEMP (°C)",
-            min_value=-50.0,
-            max_value=100.0,
-            value=0.0,
-            step=0.5,
-        )
-        calidad = colt2.selectbox(
-            "CALIDAD (OK / RECHAZO)",
-            ["OK", "RECHAZO"],
-            index=0,
-        )
-
-        observaciones_recep = st.text_area(
-            "OBSERVACIONES para esta línea "
-            "(obligatorias si no se recibió nada o hay rechazo)",
-            value="",
-        )
-
-        col_btn_add, _ = st.columns(2)
-        btn_add_line_recep = col_btn_add.button("➕ Agregar línea de recepción")
-
-        if btn_add_line_recep:
-            errores = []
-
-            if insumo_sel == "--- Selecciona un producto ---":
-                errores.append("Debes seleccionar un producto del requerimiento.")
-
-            if cantidad_po <= 0:
-                errores.append("La *CANTIDAD PO* debe ser mayor a 0.")
-
-            if (cantidad_recibida <= 0 or calidad == "RECHAZO") and not observaciones_recep.strip():
-                errores.append(
-                    "Cuando la *CANTIDAD RECIBIDA* es 0 o la calidad es RECHAZO, "
-                    "es obligatorio capturar OBSERVACIONES."
-                )
-
-            if errores:
-                st.error("No se pudo agregar la línea de recepción:")
-                for e in errores:
-                    st.write("-", e)
+            # PROVEEDOR (default desde el requerimiento)
+            if "PROVEDOR" in df_req_folio.columns:
+                prov_default_series = df_req_folio["PROVEDOR"].dropna()
+                prov_default = str(prov_default_series.iloc[0]) if not prov_default_series.empty else ""
             else:
-                item_recep = {
-                    "Fecha de recepción": fecha_recepcion.isoformat(),
-                    "PROVEEDOR": proveedor,
-                    "FACTURA / TICKET": factura_ticket,
-                    "SKU": "",  # no se captura en el formulario
-                    "PRODUCTO": insumo_sel,
-                    "UNIDAD DE MEDIDA": unidad_medida,
-                    "CANTIDAD PO": cantidad_po,
-                    "CANTIDAD RECIBIDA": cantidad_recibida,
-                    "TEMP (°C)": temp_rec,
-                    "CALIDAD (OK / RECHAZO)": calidad,
-                    "OBSERVACIONES": observaciones_recep,
-                    "RECIBIÓ": recibio,
-                    "FOLIO": "",
-                    "APROBÓ": aprobo,
-                    "ID DE REQUERIMIENTO AL QUE CORRESPONDE": id_req_actual,
-                    "Folio Generado de Recepcion": "",
-                }
+                prov_default = ""
 
-                st.session_state["carrito_recepcion"].append(item_recep)
-                st.success(
-                    f"Línea de recepción agregada: {insumo_sel} "
-                    f"(PO: {cantidad_po}, Recibido: {cantidad_recibida}, Calidad: {calidad})"
-                )
+            base_df["PROVEEDOR"] = prov_default
 
-        # ---------- 5) Carrito de recepción ----------
-        if st.session_state["carrito_recepcion"]:
-            st.markdown("### 🛒 Carrito de recepción")
+            # Campos a llenar por fila
+            base_df["Fecha de recepción"] = date.today()
+            base_df["FACTURA / TICKET"] = ""
+            base_df["RECIBIÓ"] = ""
+            base_df["CANTIDAD RECIBIDA"] = base_df["CANTIDAD PO"]
+            base_df["TEMP (°C)"] = 0.0
+            base_df["CALIDAD (OK / RECHAZO)"] = "OK"
+            base_df["OBSERVACIONES"] = ""
 
-            carrito_recep_df = pd.DataFrame(st.session_state["carrito_recepcion"])
-            carrito_recep_df["__idx__"] = carrito_recep_df.index
+            # 👇 Este widget mantiene su propio estado, no usamos session_state para el DF
+            edited_df = st.data_editor(
+                base_df,
+                column_config={
+                    "INSUMO": st.column_config.TextColumn(
+                        "Producto",
+                        disabled=True,
+                    ),
+                    "CANTIDAD PO": st.column_config.NumberColumn(
+                        "Cantidad PO",
+                        disabled=True,
+                    ),
+                    "PROVEEDOR": st.column_config.TextColumn(
+                        "PROVEEDOR",
+                        disabled=True,
+                    ),
+                    "Fecha de recepción": st.column_config.DateColumn(
+                        "Fecha de recepción",
+                        help="A llenar por cada línea.",
+                    ),
+                    "FACTURA / TICKET": st.column_config.TextColumn(
+                        "FACTURA / TICKET",
+                        help="A llenar: número de factura o ticket.",
+                    ),
+                    "RECIBIÓ": st.column_config.TextColumn(
+                        "RECIBIÓ",
+                        help="A llenar: persona que recibe ese producto.",
+                    ),
+                    "CANTIDAD RECIBIDA": st.column_config.NumberColumn(
+                        "CANTIDAD RECIBIDA",
+                        help="A llenar: cuánto llegó realmente.",
+                        min_value=0.0,
+                    ),
+                    "TEMP (°C)": st.column_config.NumberColumn(
+                        "TEMP (°C)",
+                        help="A llenar: temperatura al recibir (si aplica).",
+                        min_value=-50.0,
+                        max_value=100.0,
+                        step=0.5,
+                    ),
+                    "CALIDAD (OK / RECHAZO)": st.column_config.SelectboxColumn(
+                        "CALIDAD (OK / RECHAZO)",
+                        options=["OK", "RECHAZO"],
+                        help="A llenar: indica si se acepta o se rechaza.",
+                    ),
+                    "OBSERVACIONES": st.column_config.TextColumn(
+                        "OBSERVACIONES",
+                        help="Obligatorio si no se recibió nada o hay rechazo.",
+                    ),
+                },
+                num_rows="fixed",
+                use_container_width=True,
+                key=f"editor_recepcion_{id_req_actual or 'sin_folio'}",
+            )
 
-            header_cols = st.columns([3, 2, 2, 2, 2, 3, 1])
-            header_cols[0].markdown("**PRODUCTO**")
-            header_cols[1].markdown("**CANTIDAD PO**")
-            header_cols[2].markdown("**CANTIDAD RECIBIDA**")
-            header_cols[3].markdown("**CALIDAD**")
-            header_cols[4].markdown("**TEMP (°C)**")
-            header_cols[5].markdown("**OBSERVACIONES**")
-            header_cols[6].markdown("**Borrar**")
+            st.markdown(
+                "> **Producto / Cantidad PO / PROVEEDOR** vienen del requerimiento y están bloqueados.  \n"
+                "> Los campos **Fecha de recepción, FACTURA / TICKET, RECIBIÓ, CANTIDAD RECIBIDA, TEMP, CALIDAD y OBSERVACIONES** "
+                "se llenan por cada fila."
+            )
 
-            for _, row in carrito_recep_df.iterrows():
-                c1, c2, c3, c4, c5, c6, c7 = st.columns([3, 2, 2, 2, 2, 3, 1])
-                c1.write(row.get("PRODUCTO", ""))
-                c2.write(row.get("CANTIDAD PO", ""))
-                c3.write(row.get("CANTIDAD RECIBIDA", ""))
-                c4.write(row.get("CALIDAD (OK / RECHAZO)", ""))
-                c5.write(row.get("TEMP (°C)", ""))
-                c6.write(row.get("OBSERVACIONES", ""))
-
-                delete_key = f"del_recep_{int(row['__idx__'])}"
-                if c7.button("❌", key=delete_key):
-                    st.session_state["carrito_recepcion"].pop(int(row["__idx__"]))
-                    st.rerun()
-
-            colc1, colc2 = st.columns(2)
-            vaciar_recep = colc1.button("🗑️ Vaciar carrito de recepción")
-            btn_enviar_recep = colc2.button("✅ Confirmar y registrar recepción")
-
-            if vaciar_recep:
-                st.session_state["carrito_recepcion"] = []
-                st.info("Carrito de recepción vaciado.")
+            # ---------- 4) Botón para registrar recepción ----------
+            col_btn1, col_btn2 = st.columns(2)
+            btn_enviar_recep = col_btn2.button("✅ Confirmar y registrar recepción")
 
             if btn_enviar_recep:
                 errores = []
@@ -1559,13 +1430,23 @@ elif vista == "📥 Recepción":
                         "Vuelve a buscar el folio antes de registrar la recepción."
                     )
 
-                if not st.session_state["carrito_recepcion"]:
+                if edited_df is None or edited_df.empty:
                     errores.append(
-                        "El carrito de recepción está vacío. Agrega al menos una línea."
+                        "La tabla de recepción está vacía. Verifica el requerimiento."
                     )
 
-                if not recibio.strip():
-                    errores.append("Debes capturar la persona que RECIBIÓ.")
+                # Validación por fila
+                if edited_df is not None:
+                    for _, row in edited_df.iterrows():
+                        cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
+                        calidad = str(row.get("CALIDAD (OK / RECHAZO)", "OK") or "OK")
+                        obs = str(row.get("OBSERVACIONES", "") or "").strip()
+
+                        if (cant_rec == 0 or calidad == "RECHAZO") and obs == "":
+                            errores.append(
+                                f"En el producto '{row.get('INSUMO', '')}' la cantidad recibida es 0 o RECHAZO "
+                                "y no hay observaciones. Debes agregar una nota."
+                            )
 
                 if errores:
                     st.error("No se pudo registrar la recepción:")
@@ -1580,21 +1461,56 @@ elif vista == "📥 Recepción":
                     )
 
                     lista_recepcion_data = []
-                    for item in st.session_state["carrito_recepcion"]:
-                        rec_data = item.copy()
-                        rec_data["Folio Generado de Recepcion"] = folio_recep
+                    for _, row in edited_df.iterrows():
+                        cant_po = float(row.get("CANTIDAD PO", 0) or 0)
+                        cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
+                        obs = str(row.get("OBSERVACIONES", "") or "")
+
+                        # Si está totalmente en blanco y sin cantidades, la brincamos
+                        if cant_po == 0 and cant_rec == 0 and obs.strip() == "":
+                            continue
+
+                        fecha_linea = row.get("Fecha de recepción", date.today())
+                        if hasattr(fecha_linea, "isoformat"):
+                            fecha_str = fecha_linea.isoformat()
+                        else:
+                            fecha_str = str(fecha_linea)
+
+                        rec_data = {
+                            "Fecha de recepción": fecha_str,
+                            "PROVEEDOR": row.get("PROVEEDOR", ""),
+                            "FACTURA / TICKET": row.get("FACTURA / TICKET", ""),
+                            "SKU": "",
+                            "PRODUCTO": row.get("INSUMO", ""),
+                            "UNIDAD DE MEDIDA": "pz",
+                            "CANTIDAD PO": cant_po,
+                            "CANTIDAD RECIBIDA": cant_rec,
+                            "TEMP (°C)": float(row.get("TEMP (°C)", 0) or 0),
+                            "CALIDAD (OK / RECHAZO)": row.get("CALIDAD (OK / RECHAZO)", "OK"),
+                            "OBSERVACIONES": obs,
+                            "RECIBIÓ": row.get("RECIBIÓ", ""),
+                            "FOLIO": "",
+                            "APROBÓ": "",
+                            "ID DE REQUERIMIENTO AL QUE CORRESPONDE": id_req_actual,
+                            "Folio Generado de Recepcion": folio_recep,
+                        }
                         lista_recepcion_data.append(rec_data)
 
-                    enviar_recepcion_a_gsheet(lista_recepcion_data)
-
-                    st.session_state["carrito_recepcion"] = []
+                    if not lista_recepcion_data:
+                        st.warning(
+                            "No hay líneas válidas para registrar (todas con cantidades 0 y sin observaciones). "
+                            "No se envió nada."
+                        )
+                    else:
+                        enviar_recepcion_a_gsheet(lista_recepcion_data)
+                        st.success("Recepción registrada correctamente en Google Sheets.")
 
     else:
         st.info(
             "Busca primero un folio de requerimiento (ID_REQ) para poder registrar la recepción."
         )
 
-    # ---------- 7) Consulta de pendientes por requerimiento ----------
+    # ---------- 5) Consulta de pendientes por requerimiento (igual que antes) ----------
     st.markdown("---")
     st.markdown("### 🔍 Consulta de pendientes por requerimiento")
 
@@ -1714,7 +1630,6 @@ elif vista == "📥 Recepción":
                     how="left"
                 )
 
-                # --- Forzar a numérico por si vienen como texto del CSV ---
                 pend_df["CANTIDAD_PO"] = pd.to_numeric(
                     pend_df["CANTIDAD_PO"], errors="coerce"
                 ).fillna(0.0)
@@ -1725,7 +1640,6 @@ elif vista == "📥 Recepción":
 
                 pend_df["PENDIENTE"] = pend_df["CANTIDAD_PO"] - pend_df["CANTIDAD_RECIBIDA"]
 
-                # (SKU opcional: podrías cruzar con catalogo_df si más adelante quieres)
                 pend_df["SKU"] = ""
 
                 cols_mostrar = ["SKU", "PRODUCTO", "CANTIDAD_PO", "CANTIDAD_RECIBIDA", "PENDIENTE"]
