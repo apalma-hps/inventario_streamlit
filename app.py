@@ -389,7 +389,9 @@ RECEPCION_COLUMNS = [
     "APROBÓ",
     "ID DE REQUERIMIENTO AL QUE CORRESPONDE",
     "Folio Generado de Recepcion",
+    "fecha de caducidad",   # 👈 NUEVA COLUMNA
 ]
+
 
 # --------------------------------------------------
 # Inicializar session_state
@@ -1338,23 +1340,40 @@ elif vista == "📥 Recepción":
                 .rename(columns={"INSUMO": "INSUMO", "CANTIDAD": "CANTIDAD PO"})
             )
 
-            # PROVEEDOR (default desde el requerimiento)
+            # PROVEEDOR POR INSUMO, tomando lo que venga en Requerimientos
             if "PROVEDOR" in df_req_folio.columns:
-                prov_default_series = df_req_folio["PROVEDOR"].dropna()
-                prov_default = str(prov_default_series.iloc[0]) if not prov_default_series.empty else ""
-            else:
-                prov_default = ""
+                # Tabla (INSUMO, PROVEDOR) limpia y sin duplicados
+                prov_por_insumo = (
+                    df_req_folio[["INSUMO", "PROVEDOR"]]
+                    .dropna(subset=["INSUMO"])
+                    .copy()
+                )
+                prov_por_insumo["INSUMO"] = prov_por_insumo["INSUMO"].astype(str).str.strip()
+                prov_por_insumo["PROVEDOR"] = prov_por_insumo["PROVEDOR"].astype(str).str.strip()
 
-            base_df["PROVEEDOR"] = prov_default
+                # Si un insumo aparece varias veces, nos quedamos con el primer proveedor
+                prov_por_insumo = prov_por_insumo.drop_duplicates(subset=["INSUMO"])
+
+                # Normalizamos también el INSUMO en base_df para que el merge sea robusto
+                base_df["INSUMO"] = base_df["INSUMO"].astype(str).str.strip()
+
+                # Hacemos el merge por INSUMO
+                base_df = base_df.merge(prov_por_insumo, on="INSUMO", how="left")
+
+                # Renombramos PROVEDOR → PROVEEDOR para la tabla de recepción
+                base_df.rename(columns={"PROVEDOR": "PROVEEDOR"}, inplace=True)
+            else:
+                base_df["PROVEEDOR"] = ""
 
             # Campos a llenar por fila
             base_df["Fecha de recepción"] = date.today()
             base_df["FACTURA / TICKET"] = ""
             base_df["RECIBIÓ"] = ""
-            base_df["CANTIDAD RECIBIDA"] = base_df["CANTIDAD PO"]
-            base_df["TEMP (°C)"] = 0.0
+            base_df["CANTIDAD RECIBIDA"] = None
+            base_df["TEMP (°C)"] = None
             base_df["CALIDAD (OK / RECHAZO)"] = "OK"
             base_df["OBSERVACIONES"] = ""
+            base_df["fecha de caducidad"] = None  # 👈 NUEVA COLUMNA
 
             # 👇 Este widget mantiene su propio estado, no usamos session_state para el DF
             edited_df = st.data_editor(
@@ -1404,6 +1423,10 @@ elif vista == "📥 Recepción":
                     "OBSERVACIONES": st.column_config.TextColumn(
                         "OBSERVACIONES",
                         help="Obligatorio si no se recibió nada o hay rechazo.",
+                    ),
+                    "fecha de caducidad": st.column_config.DateColumn(  # 👈 NUEVA COLUMNA
+                        "Fecha de caducidad",
+                        help="Fecha de caducidad del lote recibido.",
                     ),
                 },
                 num_rows="fixed",
@@ -1466,15 +1489,24 @@ elif vista == "📥 Recepción":
                         cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
                         obs = str(row.get("OBSERVACIONES", "") or "")
 
-                        # Si está totalmente en blanco y sin cantidades, la brincamos
                         if cant_po == 0 and cant_rec == 0 and obs.strip() == "":
                             continue
 
+                        # Fecha de recepción
                         fecha_linea = row.get("Fecha de recepción", date.today())
                         if hasattr(fecha_linea, "isoformat"):
                             fecha_str = fecha_linea.isoformat()
                         else:
                             fecha_str = str(fecha_linea)
+
+                        # Fecha de caducidad
+                        fecha_cad = row.get("fecha de caducidad", None)
+                        if fecha_cad and hasattr(fecha_cad, "isoformat"):
+                            fecha_cad_str = fecha_cad.isoformat()
+                        elif fecha_cad:
+                            fecha_cad_str = str(fecha_cad)
+                        else:
+                            fecha_cad_str = ""
 
                         rec_data = {
                             "Fecha de recepción": fecha_str,
@@ -1493,6 +1525,7 @@ elif vista == "📥 Recepción":
                             "APROBÓ": "",
                             "ID DE REQUERIMIENTO AL QUE CORRESPONDE": id_req_actual,
                             "Folio Generado de Recepcion": folio_recep,
+                            "fecha de caducidad": fecha_cad_str,  # 👈 NUEVO CAMPO
                         }
                         lista_recepcion_data.append(rec_data)
 
