@@ -390,16 +390,17 @@ REQUERIMIENTOS_COLUMNS = [
     "COSTO UNIDAD",
     "CANTIDAD",
     "COSTO TOTAL",
-    "FECHA DE RECEPCIÓN",
+    "FECHA DESEADA",
     "FACTURA",
     "OBSERVACIONES",
     "ESTATUS",
     "ID_REQ",
-    "Fecha",
+    "FECHA DE REQUSICIÓN",
     "Hora",
     "CECO_DESTINO",
     "CATEGORIA",
 ]
+
 
 # --------------------------------------------------
 # Inicializar session_state
@@ -611,15 +612,6 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
     except pd.errors.ParserError:
         df = pd.read_csv(url, engine="python", on_bad_lines="skip")
 
-    def norm(s: str) -> str:
-        return (
-            str(s)
-            .strip()
-            .lower()
-            .replace(" ", "")
-            .replace("_", "")
-        )
-
     rename_map = {}
     for col in df.columns:
         n = norm(col)
@@ -627,16 +619,19 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
             rename_map[col] = "ID_REQ"
         elif n == "estatus":
             rename_map[col] = "ESTATUS"
-        elif n == "fechadepedido":
+        elif n in ("fechadepedido", "fechapedido"):
             rename_map[col] = "FECHA DE PEDIDO"
-        elif n in ("fechaderecepcion", "fechaderecepción"):
-            rename_map[col] = "FECHA DE RECEPCIÓN"
+        # ahora la fecha de entrega se llama FECHA DESEADA
+        elif n in ("fechadeseada", "fechaderecepcion", "fechaderecepción"):
+            rename_map[col] = "FECHA DESEADA"
+        # la fecha de requisición nueva
+        elif n in ("fechaderequsición", "fechaderequisicion"):
+            rename_map[col] = "FECHA DE REQUSICIÓN"
 
     df = df.rename(columns=rename_map)
     df.columns = df.columns.astype(str).str.strip()
 
     return df
-
 
 def generar_folio_requerimiento() -> (str, str, str):
     tz = pytz.timezone("America/Mexico_City")
@@ -1142,23 +1137,24 @@ elif vista == "📨 Requerimientos de producto":
 
                 for item in st.session_state["carrito_req"]:
                     req_data = {
-                        "FECHA DE PEDIDO": fecha_creacion,
-                        "PROVEDOR": proveedor,
+                        "FECHA DE PEDIDO": fecha_creacion,  # fecha en que se levanta el req
+                        "PROVEDOR": proveedor,  # de momento vacío
                         "INSUMO": item["INSUMO"],
                         "UNIDAD DE MEDIDA": item["UNIDAD DE MEDIDA"],
-                        "COSTO UNIDAD": "",
+                        "COSTO UNIDAD": "",  # lo llenas después en Sheets
                         "CANTIDAD": item["CANTIDAD"],
-                        "COSTO TOTAL": "",
-                        "FECHA DE RECEPCIÓN": fecha_requerida.isoformat(),
+                        "COSTO TOTAL": "",  # lo puedes formular en Sheets
+                        "FECHA DESEADA": fecha_requerida.isoformat(),  # antes era FECHA DE RECEPCIÓN
                         "FACTURA": "",
                         "OBSERVACIONES": item["Observaciones"],
                         "ESTATUS": "Pendiente",
                         "ID_REQ": folio_req,
-                        "Fecha": fecha_creacion,
+                        "FECHA DE REQUSICIÓN": fecha_creacion,  # nueva columna en tu Sheet
                         "Hora": hora_creacion,
                         "CECO_DESTINO": ceco_destino,
                         "CATEGORIA": item.get("Categoria", "Sin categoría"),
                     }
+
                     lista_req_data.append(req_data)
 
                 lista_req_data = sorted(
@@ -1194,9 +1190,9 @@ elif vista == "📨 Requerimientos de producto":
                 )
                 st.stop()
 
-            if "Fecha" in req_df.columns and "Hora" in req_df.columns:
+            if "FECHA DE REQUSICIÓN" in req_df.columns and "Hora" in req_df.columns:
                 req_df_sorted = req_df.sort_values(
-                    by=["Fecha", "Hora"], ascending=[True, True]
+                    by=["FECHA DE REQUSICIÓN", "Hora"], ascending=[True, True]
                 )
             else:
                 req_df_sorted = req_df.copy()
@@ -1220,9 +1216,12 @@ elif vista == "📨 Requerimientos de producto":
             if "FECHA DE PEDIDO" in df_filtrado.columns:
                 agg_dict["FECHA DE PEDIDO"] = "last"
                 cols_resumen.append("FECHA DE PEDIDO")
-            if "FECHA DE RECEPCIÓN" in df_filtrado.columns:
-                agg_dict["FECHA DE RECEPCIÓN"] = "last"
-                cols_resumen.append("FECHA DE RECEPCIÓN")
+            if "FECHA DESEADA" in df_filtrado.columns:
+                agg_dict["FECHA DESEADA"] = "last"
+                cols_resumen.append("FECHA DESEADA")
+            if "FECHA DE REQUSICIÓN" in df_filtrado.columns:
+                agg_dict["FECHA DE REQUSICIÓN"] = "last"
+                cols_resumen.append("FECHA DE REQUSICIÓN")
 
             resumen = df_filtrado.groupby("ID_REQ", as_index=False).agg(agg_dict)
 
@@ -1244,8 +1243,8 @@ elif vista == "📨 Requerimientos de producto":
                         "INSUMO",
                         "UNIDAD DE MEDIDA",
                         "CANTIDAD",
-                        "FECHA DE RECEPCIÓN"
-                        if "FECHA DE RECEPCIÓN" in detalle.columns
+                        "FECHA DESEADA"
+                        if "FECHA DESEADA" in detalle.columns
                         else None,
                         "FACTURA",
                         "ESTATUS",
