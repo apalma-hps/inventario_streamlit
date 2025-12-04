@@ -1086,18 +1086,20 @@ elif vista == "📨 Requerimientos de producto":
             errores = []
 
             # 🔎 Validación de lead time mínimo de 4 días
+            # ❗ NO aplica para Flautas Lamartine
             tz = pytz.timezone("America/Mexico_City")
             hoy = datetime.now(tz).date()
             diferencia_dias = (fecha_requerida - hoy).days
 
-            if diferencia_dias < 4:
-                st.warning(
-                    "NO ES POSIBLE GENERAR PEDIDOS CON UN TIEMPO MENOR A 4 DÍAS "
-                    f"(hoy: {hoy.isoformat()}, fecha requerida: {fecha_requerida.isoformat()})."
-                )
-                errores.append(
-                    "La *Fecha requerida* debe ser al menos 4 días después de la fecha actual."
-                )
+            if ceco_destino != "Flautas Lamartine":
+                if diferencia_dias < 4:
+                    st.warning(
+                        "NO ES POSIBLE GENERAR PEDIDOS CON UN TIEMPO MENOR A 4 DÍAS "
+                        f"(hoy: {hoy.isoformat()}, fecha requerida: {fecha_requerida.isoformat()})."
+                    )
+                    errores.append(
+                        "La *Fecha requerida* debe ser al menos 4 días después de la fecha actual."
+                    )
 
             # Validaciones existentes
             if not ceco_destino:
