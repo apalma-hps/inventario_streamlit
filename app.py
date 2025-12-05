@@ -389,9 +389,8 @@ RECEPCION_COLUMNS = [
     "APROBÓ",
     "ID DE REQUERIMIENTO AL QUE CORRESPONDE",
     "Folio Generado de Recepcion",
-    "fecha de caducidad",   # 👈 NUEVA COLUMNA
+    "fecha de caducidad",
 ]
-
 
 # --------------------------------------------------
 # Inicializar session_state
@@ -415,7 +414,6 @@ if "req_recepcion_df" not in st.session_state:
 if "req_recepcion_id" not in st.session_state:
     st.session_state["req_recepcion_id"] = ""
 
-# DataFrame editable de recepción
 if "tabla_recepcion_df" not in st.session_state:
     st.session_state["tabla_recepcion_df"] = None
 
@@ -821,17 +819,22 @@ def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
 # 🔹 Función auxiliar para leer números de forma segura desde las filas del data_editor
 def safe_float_from_row(row, col_name, default=0.0):
     """
-    Convierte a float un valor de la fila `row[col_name]` manejando pd.NA, None,
-    strings vacíos, etc. Devuelve `default` si no se puede convertir.
+    Convierte a float un valor de la fila `row[col_name]` manejando None, strings vacíos, etc.
+    Devuelve `default` si no se puede convertir.
     """
-    valor = row.get(col_name, default)
     try:
-        # Maneja pd.NA, NaN, etc.
-        if pd.isna(valor):
+        valor = row[col_name]
+    except KeyError:
+        return default
+
+    if valor is None:
+        return default
+
+    if isinstance(valor, str):
+        valor = valor.strip().replace(",", "")
+        if valor == "":
             return default
-    except TypeError:
-        # Algunos tipos no soportan isna; pasamos a try/except de abajo
-        pass
+
     try:
         return float(valor)
     except (TypeError, ValueError):
@@ -1105,8 +1108,7 @@ elif vista == "📨 Requerimientos de producto":
         if send_req:
             errores = []
 
-            # 🔎 Validación de lead time mínimo de 4 días
-            # ❗ NO aplica para Flautas Lamartine
+            # Validación lead time ≥ 4 días (excepto Flautas Lamartine)
             tz = pytz.timezone("America/Mexico_City")
             hoy = datetime.now(tz).date()
             diferencia_dias = (fecha_requerida - hoy).days
@@ -1121,7 +1123,6 @@ elif vista == "📨 Requerimientos de producto":
                         "La *Fecha requerida* debe ser al menos 4 días después de la fecha actual."
                     )
 
-            # Validaciones existentes
             if not ceco_destino:
                 errores.append("Debes seleccionar el *CECO destino*.")
             if not st.session_state["carrito_req"]:
@@ -1282,7 +1283,6 @@ elif vista == "📥 Recepción":
         "4) Registra todo en la hoja **'Recepción'** con un solo botón."
     )
 
-    # (catálogo, por si lo necesitas después, lo dejamos igual)
     try:
         catalogo_df = load_catalogo_productos()
     except Exception as e:
@@ -1290,7 +1290,6 @@ elif vista == "📥 Recepción":
         st.exception(e)
         catalogo_df = pd.DataFrame()
 
-    # ---------- 1) Buscar requerimiento por folio ----------
     col_buscar1, col_buscar2 = st.columns([2, 1])
     id_req_input = col_buscar1.text_input(
         "Folio de requerimiento (ID_REQ)",
@@ -1339,7 +1338,6 @@ elif vista == "📥 Recepción":
     df_req_folio = st.session_state.get("req_recepcion_df", None)
     id_req_actual = st.session_state.get("req_recepcion_id", "")
 
-    # ---------- 2) Mostrar detalle del requerimiento ----------
     if df_req_folio is not None and not df_req_folio.empty:
         st.markdown("### 🧾 Productos del requerimiento")
 
@@ -1362,10 +1360,8 @@ elif vista == "📥 Recepción":
             hide_index=True,
         )
 
-        # ---------- 3) Tabla editable: recepción por insumo ----------
         st.markdown("### 📦 Registro de recepción por insumo")
 
-        # Construimos SIEMPRE la base, pero el data_editor mantiene el estado con su key
         if "INSUMO" not in df_req_folio.columns or "CANTIDAD" not in df_req_folio.columns:
             st.error(
                 "La hoja de requerimientos debe tener columnas 'INSUMO' y 'CANTIDAD' "
@@ -1378,9 +1374,7 @@ elif vista == "📥 Recepción":
                 .rename(columns={"INSUMO": "INSUMO", "CANTIDAD": "CANTIDAD PO"})
             )
 
-            # PROVEEDOR POR INSUMO, tomando lo que venga en Requerimientos
             if "PROVEDOR" in df_req_folio.columns:
-                # Tabla (INSUMO, PROVEDOR) limpia y sin duplicados
                 prov_por_insumo = (
                     df_req_folio[["INSUMO", "PROVEDOR"]]
                     .dropna(subset=["INSUMO"])
@@ -1388,22 +1382,13 @@ elif vista == "📥 Recepción":
                 )
                 prov_por_insumo["INSUMO"] = prov_por_insumo["INSUMO"].astype(str).str.strip()
                 prov_por_insumo["PROVEDOR"] = prov_por_insumo["PROVEDOR"].astype(str).str.strip()
-
-                # Si un insumo aparece varias veces, nos quedamos con el primer proveedor
                 prov_por_insumo = prov_por_insumo.drop_duplicates(subset=["INSUMO"])
-
-                # Normalizamos también el INSUMO en base_df para que el merge sea robusto
                 base_df["INSUMO"] = base_df["INSUMO"].astype(str).str.strip()
-
-                # Hacemos el merge por INSUMO
                 base_df = base_df.merge(prov_por_insumo, on="INSUMO", how="left")
-
-                # Renombramos PROVEDOR → PROVEEDOR para la tabla de recepción
                 base_df.rename(columns={"PROVEDOR": "PROVEEDOR"}, inplace=True)
             else:
                 base_df["PROVEEDOR"] = ""
 
-            # Campos a llenar por fila
             base_df["Fecha de recepción"] = date.today()
             base_df["FACTURA / TICKET"] = ""
             base_df["RECIBIÓ"] = ""
@@ -1411,9 +1396,8 @@ elif vista == "📥 Recepción":
             base_df["TEMP (°C)"] = None
             base_df["CALIDAD (OK / RECHAZO)"] = "OK"
             base_df["OBSERVACIONES"] = ""
-            base_df["fecha de caducidad"] = None  # 👈 NUEVA COLUMNA
+            base_df["fecha de caducidad"] = None
 
-            # 👇 Este widget mantiene su propio estado, no usamos session_state para el DF
             edited_df = st.data_editor(
                 base_df,
                 column_config={
@@ -1462,7 +1446,7 @@ elif vista == "📥 Recepción":
                         "OBSERVACIONES",
                         help="Obligatorio si no se recibió nada o hay rechazo.",
                     ),
-                    "fecha de caducidad": st.column_config.DateColumn(  # 👈 NUEVA COLUMNA
+                    "fecha de caducidad": st.column_config.DateColumn(
                         "Fecha de caducidad",
                         help="Fecha de caducidad del lote recibido.",
                     ),
@@ -1478,7 +1462,6 @@ elif vista == "📥 Recepción":
                 "se llenan por cada fila."
             )
 
-            # ---------- 4) Botón para registrar recepción ----------
             col_btn1, col_btn2 = st.columns(2)
             btn_enviar_recep = col_btn2.button("✅ Confirmar y registrar recepción")
 
@@ -1496,7 +1479,6 @@ elif vista == "📥 Recepción":
                         "La tabla de recepción está vacía. Verifica el requerimiento."
                     )
 
-                # Validación por fila
                 if edited_df is not None:
                     for _, row in edited_df.iterrows():
                         cant_rec = safe_float_from_row(row, "CANTIDAD RECIBIDA", 0.0)
@@ -1527,18 +1509,15 @@ elif vista == "📥 Recepción":
                         cant_rec = safe_float_from_row(row, "CANTIDAD RECIBIDA", 0.0)
                         obs = str(row.get("OBSERVACIONES", "") or "")
 
-                        # Si no hay nada relevante en la línea, se omite
                         if cant_po == 0 and cant_rec == 0 and obs.strip() == "":
                             continue
 
-                        # Fecha de recepción
                         fecha_linea = row.get("Fecha de recepción", date.today())
                         if hasattr(fecha_linea, "isoformat"):
                             fecha_str = fecha_linea.isoformat()
                         else:
                             fecha_str = str(fecha_linea)
 
-                        # Fecha de caducidad
                         fecha_cad = row.get("fecha de caducidad", None)
                         if fecha_cad and hasattr(fecha_cad, "isoformat"):
                             fecha_cad_str = fecha_cad.isoformat()
@@ -1564,7 +1543,7 @@ elif vista == "📥 Recepción":
                             "APROBÓ": "",
                             "ID DE REQUERIMIENTO AL QUE CORRESPONDE": id_req_actual,
                             "Folio Generado de Recepcion": folio_recep,
-                            "fecha de caducidad": fecha_cad_str,  # 👈 NUEVO CAMPO
+                            "fecha de caducidad": fecha_cad_str,
                         }
                         lista_recepcion_data.append(rec_data)
 
@@ -1582,7 +1561,6 @@ elif vista == "📥 Recepción":
             "Busca primero un folio de requerimiento (ID_REQ) para poder registrar la recepción."
         )
 
-    # ---------- 5) Consulta de pendientes por requerimiento ----------
     st.markdown("---")
     st.markdown("### 🔍 Consulta de pendientes por requerimiento")
 
