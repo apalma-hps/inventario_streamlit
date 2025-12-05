@@ -818,6 +818,26 @@ def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
         st.exception(e)
 
 
+# 🔹 Función auxiliar para leer números de forma segura desde las filas del data_editor
+def safe_float_from_row(row, col_name, default=0.0):
+    """
+    Convierte a float un valor de la fila `row[col_name]` manejando pd.NA, None,
+    strings vacíos, etc. Devuelve `default` si no se puede convertir.
+    """
+    valor = row.get(col_name, default)
+    try:
+        # Maneja pd.NA, NaN, etc.
+        if pd.isna(valor):
+            return default
+    except TypeError:
+        # Algunos tipos no soportan isna; pasamos a try/except de abajo
+        pass
+    try:
+        return float(valor)
+    except (TypeError, ValueError):
+        return default
+
+
 # --------------------------------------------------
 # Selector de vista
 # --------------------------------------------------
@@ -1479,7 +1499,7 @@ elif vista == "📥 Recepción":
                 # Validación por fila
                 if edited_df is not None:
                     for _, row in edited_df.iterrows():
-                        cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
+                        cant_rec = safe_float_from_row(row, "CANTIDAD RECIBIDA", 0.0)
                         calidad = str(row.get("CALIDAD (OK / RECHAZO)", "OK") or "OK")
                         obs = str(row.get("OBSERVACIONES", "") or "").strip()
 
@@ -1503,10 +1523,11 @@ elif vista == "📥 Recepción":
 
                     lista_recepcion_data = []
                     for _, row in edited_df.iterrows():
-                        cant_po = float(row.get("CANTIDAD PO", 0) or 0)
-                        cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
+                        cant_po = safe_float_from_row(row, "CANTIDAD PO", 0.0)
+                        cant_rec = safe_float_from_row(row, "CANTIDAD RECIBIDA", 0.0)
                         obs = str(row.get("OBSERVACIONES", "") or "")
 
+                        # Si no hay nada relevante en la línea, se omite
                         if cant_po == 0 and cant_rec == 0 and obs.strip() == "":
                             continue
 
@@ -1535,7 +1556,7 @@ elif vista == "📥 Recepción":
                             "UNIDAD DE MEDIDA": "pz",
                             "CANTIDAD PO": cant_po,
                             "CANTIDAD RECIBIDA": cant_rec,
-                            "TEMP (°C)": float(row.get("TEMP (°C)", 0) or 0),
+                            "TEMP (°C)": safe_float_from_row(row, "TEMP (°C)", 0.0),
                             "CALIDAD (OK / RECHAZO)": row.get("CALIDAD (OK / RECHAZO)", "OK"),
                             "OBSERVACIONES": obs,
                             "RECIBIÓ": row.get("RECIBIÓ", ""),
@@ -1561,7 +1582,7 @@ elif vista == "📥 Recepción":
             "Busca primero un folio de requerimiento (ID_REQ) para poder registrar la recepción."
         )
 
-    # ---------- 5) Consulta de pendientes por requerimiento (igual que antes) ----------
+    # ---------- 5) Consulta de pendientes por requerimiento ----------
     st.markdown("---")
     st.markdown("### 🔍 Consulta de pendientes por requerimiento")
 
