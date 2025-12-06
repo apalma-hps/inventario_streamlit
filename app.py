@@ -1526,18 +1526,27 @@ elif vista == "📥 Recepción":
                 "para construir la tabla de recepción."
             )
         else:
+            # Siempre agregamos por INSUMO para no perder productos sin SKU
+            base_df = (
+                df_req_folio.groupby("INSUMO", as_index=False)["CANTIDAD"]
+                .sum()
+                .rename(columns={"CANTIDAD": "CANTIDAD PO"})
+            )
+
+            # Si hay columna SKU, la anexamos por INSUMO (uno por producto)
             if "SKU" in df_req_folio.columns:
-                base_df = (
-                    df_req_folio.groupby(["INSUMO", "SKU"], as_index=False)["CANTIDAD"]
-                    .sum()
-                    .rename(columns={"CANTIDAD": "CANTIDAD PO"})
+                sku_por_insumo = (
+                    df_req_folio[["INSUMO", "SKU"]]
+                    .dropna(subset=["INSUMO"])
+                    .copy()
                 )
+                sku_por_insumo["INSUMO"] = sku_por_insumo["INSUMO"].astype(str).str.strip()
+                sku_por_insumo = sku_por_insumo.drop_duplicates(subset=["INSUMO"])
+
+                base_df["INSUMO"] = base_df["INSUMO"].astype(str).str.strip()
+                base_df = base_df.merge(sku_por_insumo, on="INSUMO", how="left")
             else:
-                base_df = (
-                    df_req_folio.groupby("INSUMO", as_index=False)["CANTIDAD"]
-                    .sum()
-                    .rename(columns={"CANTIDAD": "CANTIDAD PO"})
-                )
+                base_df["SKU"] = ""
 
             # PROVEEDOR POR INSUMO, tomando lo que venga en Requerimientos
             if "PROVEDOR" in df_req_folio.columns:
