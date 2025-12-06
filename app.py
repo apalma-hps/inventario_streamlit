@@ -1568,21 +1568,16 @@ elif vista == "📥 Recepción":
 
             # 3.2 Manejo de estado para que el PRIMER click ya tenga datos
             state_key = f"recep_{id_req_actual or 'sin_folio'}"
-            editor_key = f"editor_{state_key}"
 
             # Inicializar SOLO si no existe
             if state_key not in st.session_state:
                 st.session_state[state_key] = base_df.copy()
+            else:
+                # Por seguridad, si por alguna razón se guardó algo que no es DF, lo reseteamos
+                if not isinstance(st.session_state[state_key], pd.DataFrame):
+                    st.session_state[state_key] = base_df.copy()
 
-
-            # 🔥 Callback: cada vez que cambie la tabla, actualizamos el estado
-            def actualizar_tabla():
-                nuevo_df = st.session_state.get(editor_key)
-                if nuevo_df is not None:
-                    st.session_state[state_key] = nuevo_df.copy()
-
-
-            # Mostrar el data_editor con callback
+            # 3.3 Mostrar el data_editor y ACTUALIZAR el estado con lo editado
             edited_df = st.data_editor(
                 st.session_state[state_key],
                 column_config={
@@ -1642,9 +1637,11 @@ elif vista == "📥 Recepción":
                 },
                 num_rows="fixed",
                 use_container_width=True,
-                key=editor_key,  # 👈 importante: coincide con el del callback
-                on_change=actualizar_tabla,
+                key=state_key,  # puedes usar el mismo state_key como key del widget
             )
+
+            # Actualizar el DataFrame en sesión con lo que editó el usuario
+            st.session_state[state_key] = edited_df
 
             st.markdown(
                 "> **Producto / Cantidad PO / PROVEEDOR** vienen del requerimiento y están bloqueados.  \n"
