@@ -1506,10 +1506,12 @@ elif vista == "📥 Recepción":
             hide_index=True,
         )
 
+        # SOLUCIÓN: Reemplaza la sección de la tabla editable (líneas ~1150-1300 aprox)
+        # con este código corregido:
+
         # ---------- 3) Tabla editable: recepción por insumo ----------
         st.markdown("### 📦 Registro de recepción por insumo")
 
-        # Construimos SIEMPRE la base, pero el data_editor mantiene el estado con su key
         if "INSUMO" not in df_req_folio.columns or "CANTIDAD" not in df_req_folio.columns:
             st.error(
                 "La hoja de requerimientos debe tener columnas 'INSUMO' y 'CANTIDAD' "
@@ -1519,9 +1521,7 @@ elif vista == "📥 Recepción":
             # 3.1 Base: INSUMO + (SKU si existe) + CANTIDAD PO
             if "SKU" in df_req_folio.columns:
                 tmp = df_req_folio.dropna(subset=["INSUMO"]).copy()
-                # Si SKU viene vacío/NaN en requerimientos viejos, lo tratamos como ""
                 tmp["SKU"] = tmp["SKU"].fillna("").astype(str).str.strip()
-
                 base_df = (
                     tmp.groupby(["INSUMO", "SKU"], as_index=False)["CANTIDAD"]
                     .sum()
@@ -1534,13 +1534,10 @@ elif vista == "📥 Recepción":
                     .sum()
                     .rename(columns={"CANTIDAD": "CANTIDAD PO"})
                 )
-                # Aseguramos que exista columna SKU para el data_editor
                 base_df["SKU"] = ""
 
-            # 🔽 A PARTIR DE AQUÍ DEJA TAL CUAL LO QUE YA TENÍAS 🔽
-            # PROVEEDOR POR INSUMO, tomando lo que venga en Requerimientos
+            # PROVEEDOR POR INSUMO
             if "PROVEDOR" in df_req_folio.columns:
-                # Tabla (INSUMO, PROVEDOR) limpia y sin duplicados
                 prov_por_insumo = (
                     df_req_folio[["INSUMO", "PROVEDOR"]]
                     .dropna(subset=["INSUMO"])
@@ -1548,51 +1545,36 @@ elif vista == "📥 Recepción":
                 )
                 prov_por_insumo["INSUMO"] = prov_por_insumo["INSUMO"].astype(str).str.strip()
                 prov_por_insumo["PROVEDOR"] = prov_por_insumo["PROVEDOR"].astype(str).str.strip()
-
-                # Si un insumo aparece varias veces, nos quedamos con el primer proveedor
                 prov_por_insumo = prov_por_insumo.drop_duplicates(subset=["INSUMO"])
-
-                # Normalizamos también el INSUMO en base_df para que el merge sea robusto
                 base_df["INSUMO"] = base_df["INSUMO"].astype(str).str.strip()
-
-                # Hacemos el merge por INSUMO
                 base_df = base_df.merge(prov_por_insumo, on="INSUMO", how="left")
-
-                # Renombramos PROVEDOR → PROVEEDOR para la tabla de recepción
                 base_df.rename(columns={"PROVEDOR": "PROVEEDOR"}, inplace=True)
             else:
                 base_df["PROVEEDOR"] = ""
 
-            # Campos a llenar por fila
-            base_df["Fecha de recepción"] = date.today()
-            base_df["FACTURA / TICKET"] = ""
-            base_df["RECIBIÓ"] = ""
-            base_df["CANTIDAD RECIBIDA"] = None
-            base_df["TEMP (°C)"] = None
-            base_df["CALIDAD (OK / RECHAZO)"] = "OK"
-            base_df["OBSERVACIONES"] = ""
-            base_df["fecha de caducidad"] = None  # 👈 NUEVA COLUMNA
+            # 🔑 CLAVE: Inicializar el DataFrame en session_state si no existe
+            state_key = f"edited_recepcion_{id_req_actual or 'sin_folio'}"
 
-            # 👇 Este widget mantiene su propio estado, no usamos session_state para el DF
+            if state_key not in st.session_state:
+                # Primera vez: inicializamos con valores por defecto
+                base_df["Fecha de recepción"] = date.today()
+                base_df["FACTURA / TICKET"] = ""
+                base_df["RECIBIÓ"] = ""
+                base_df["CANTIDAD RECIBIDA"] = 0.0  # ⚠️ Cambié None a 0.0
+                base_df["TEMP (°C)"] = 0.0  # ⚠️ Cambié None a 0.0
+                base_df["CALIDAD (OK / RECHAZO)"] = "OK"
+                base_df["OBSERVACIONES"] = ""
+                base_df["fecha de caducidad"] = None
+                st.session_state[state_key] = base_df.copy()
+
+            # 📝 Mostrar el data_editor con el DataFrame del estado
             edited_df = st.data_editor(
-                base_df,
+                st.session_state[state_key],  # ⚠️ Usamos el DF del estado
                 column_config={
-                    "INSUMO": st.column_config.TextColumn(
-                        "Producto",
-                        disabled=True,
-                    ),
-                    "SKU": st.column_config.TextColumn(
-                        "SKU",
-                        disabled=True,
-                    ),
-                    "CANTIDAD PO": st.column_config.NumberColumn(
-                        "Cantidad PO",
-                        disabled=True,
-                    ),
-                    "PROVEEDOR": st.column_config.TextColumn(
-                        "PROVEEDOR",
-                        disabled=True,
-                    ),
+                    "INSUMO": st.column_config.TextColumn("Producto", disabled=True),
+                    "SKU": st.column_config.TextColumn("SKU", disabled=True),
+                    "CANTIDAD PO": st.column_config.NumberColumn("Cantidad PO", disabled=True),
+                    "PROVEEDOR": st.column_config.TextColumn("PROVEEDOR", disabled=True),
                     "Fecha de recepción": st.column_config.DateColumn(
                         "Fecha de recepción",
                         help="A llenar por cada línea.",
@@ -1609,6 +1591,7 @@ elif vista == "📥 Recepción":
                         "CANTIDAD RECIBIDA",
                         help="A llenar: cuánto llegó realmente.",
                         min_value=0.0,
+                        format="%.2f",  # ⚠️ Agregué formato
                     ),
                     "TEMP (°C)": st.column_config.NumberColumn(
                         "TEMP (°C)",
@@ -1616,6 +1599,7 @@ elif vista == "📥 Recepción":
                         min_value=-50.0,
                         max_value=100.0,
                         step=0.5,
+                        format="%.1f",  # ⚠️ Agregué formato
                     ),
                     "CALIDAD (OK / RECHAZO)": st.column_config.SelectboxColumn(
                         "CALIDAD (OK / RECHAZO)",
@@ -1633,20 +1617,28 @@ elif vista == "📥 Recepción":
                 },
                 num_rows="fixed",
                 use_container_width=True,
-                key=f"editor_recepcion_{id_req_actual or 'sin_folio'}",
+                key=f"editor_{state_key}",  # ⚠️ Key única
             )
+
+            # ⚠️ CRÍTICO: Actualizar el estado con los cambios del editor
+            st.session_state[state_key] = edited_df.copy()
 
             # ---------- 4) Botón para registrar recepción ----------
             col_btn1, col_btn2 = st.columns(2)
+
+            # Botón para limpiar la tabla
+            if col_btn1.button("🗑️ Limpiar tabla"):
+                if state_key in st.session_state:
+                    del st.session_state[state_key]
+                st.rerun()
+
             btn_enviar_recep = col_btn2.button("✅ Confirmar y registrar recepción")
 
 
-            # Helpers locales para tipos
+            # Helpers para conversión segura
             def _to_float(x):
                 try:
-                    if x is None:
-                        return 0.0
-                    if isinstance(x, str) and x.strip() == "":
+                    if x is None or (isinstance(x, str) and x.strip() == ""):
                         return 0.0
                     return float(x)
                 except Exception:
@@ -1656,7 +1648,7 @@ elif vista == "📥 Recepción":
             def _to_str(x):
                 if x is None:
                     return ""
-                return str(x)
+                return str(x).strip()
 
 
             if btn_enviar_recep:
@@ -1668,110 +1660,63 @@ elif vista == "📥 Recepción":
                         "Vuelve a buscar el folio antes de registrar la recepción."
                     )
 
+                # ⚠️ Usamos edited_df que ya tiene los valores actualizados
                 if edited_df is None or edited_df.empty:
-                    errores.append(
-                        "La tabla de recepción está vacía. Verifica el requerimiento."
-                    )
+                    errores.append("La tabla de recepción está vacía.")
 
-                # 🔍 Validación por fila
-                if edited_df is not None:
-                    for _, row in edited_df.iterrows():
-                        # Leer la cantidad recibida usando nombre normalizado
-                        raw_cant_rec = get_value_by_norm(row, "cantidadrecibida")
-                        cant_rec = _to_float(raw_cant_rec)
+                # 🔍 Validación por fila - SIN normalización compleja
+                if edited_df is not None and not edited_df.empty:
+                    for idx, row in edited_df.iterrows():
+                        # ⚠️ Acceso DIRECTO a las columnas (sin normalización)
+                        cant_rec = _to_float(row.get("CANTIDAD RECIBIDA", 0))
+                        calidad = _to_str(row.get("CALIDAD (OK / RECHAZO)", "OK"))
+                        obs = _to_str(row.get("OBSERVACIONES", ""))
+                        producto = _to_str(row.get("INSUMO", ""))
 
-                        # Calidad y observaciones
-                        raw_calidad = (
-                                get_value_by_norm(row, "calidad(ok/rechazo)")
-                                or row.get("CALIDAD (OK / RECHAZO)", "OK")
-                        )
-                        calidad = _to_str(raw_calidad)
-
-                        raw_obs = (
-                                get_value_by_norm(row, "observaciones")
-                                or row.get("OBSERVACIONES", "")
-                        )
-                        obs = _to_str(raw_obs)
-
-                        # Regla: si no se recibe nada o es rechazo, debe haber observaciones
-                        if (cant_rec == 0 or calidad == "RECHAZO") and obs.strip() == "":
+                        # Validación: si cantidad es 0 o rechazo, debe haber observaciones
+                        if (cant_rec == 0 or calidad == "RECHAZO") and not obs:
                             errores.append(
-                                f"En el producto '{row.get('INSUMO', '')}' la cantidad recibida es 0 o RECHAZO "
-                                "y no hay observaciones. Debes agregar una nota."
+                                f"En '{producto}' la cantidad recibida es 0 o RECHAZO "
+                                f"y no hay observaciones. Debes agregar una nota."
                             )
 
                 if errores:
-                    st.error("No se pudo registrar la recepción:")
+                    st.error("❌ No se pudo registrar la recepción:")
                     for e in errores:
                         st.write("-", e)
                 else:
                     folio_recep, fecha_folio, hora_folio = generar_folio_recepcion()
-                    st.info(
-                        f"Folio de recepción generado: **{folio_recep}**  \n"
-                        f"Fecha de recepción (folio): **{fecha_folio}**  \n"
-                        f"Hora de recepción (folio): **{hora_folio}**"
+
+                    st.success(
+                        f"✅ Folio de recepción generado: **{folio_recep}**  \n"
+                        f"📅 Fecha: **{fecha_folio}** | ⏰ Hora: **{hora_folio}**"
                     )
 
                     lista_recepcion_data = []
 
-                    # 🚚 Construimos las filas a enviar a Apps Script
-                    for _, row in edited_df.iterrows():
-                        # CANTIDAD PO desde la tabla
+                    # 🚚 Construir datos para enviar - ACCESO DIRECTO a columnas
+                    for idx, row in edited_df.iterrows():
                         cant_po = _to_float(row.get("CANTIDAD PO", 0))
-
-                        # CANTIDAD RECIBIDA desde columna editable (usando nombre normalizado)
-                        raw_cant_rec = get_value_by_norm(row, "cantidadrecibida")
-                        cant_rec = _to_float(raw_cant_rec)
-
-                        # Si no hay nada relevante en la fila, la saltamos
+                        cant_rec = _to_float(row.get("CANTIDAD RECIBIDA", 0))
                         obs_linea = _to_str(row.get("OBSERVACIONES", ""))
-                        if cant_po == 0 and cant_rec == 0 and obs_linea.strip() == "":
+
+                        # Saltar filas vacías
+                        if cant_po == 0 and cant_rec == 0 and not obs_linea:
                             continue
 
-                        # Fecha de recepción (editable en la tabla)
-                        raw_fecha = (
-                                get_value_by_norm(row, "fechaderecepcion")
-                                or row.get("Fecha de recepción", date.today())
-                        )
-                        # Puede venir como date, datetime, string o lista (según Streamlit)
-                        if isinstance(raw_fecha, (list, tuple)):
-                            raw_fecha = raw_fecha[0] if raw_fecha else None
+                        # Fecha de recepción
+                        fecha_rec = row.get("Fecha de recepción", date.today())
+                        if isinstance(fecha_rec, (list, tuple)):
+                            fecha_rec = fecha_rec[0] if fecha_rec else date.today()
+                        fecha_str = fecha_rec.isoformat() if hasattr(fecha_rec, "isoformat") else str(fecha_rec)
 
-                        if hasattr(raw_fecha, "isoformat"):
-                            fecha_str = raw_fecha.isoformat()
-                        else:
-                            fecha_str = _to_str(raw_fecha)
+                        # Fecha de caducidad
+                        fecha_cad = row.get("fecha de caducidad", None)
+                        if isinstance(fecha_cad, (list, tuple)):
+                            fecha_cad = fecha_cad[0] if fecha_cad else None
+                        fecha_cad_str = fecha_cad.isoformat() if (fecha_cad and hasattr(fecha_cad, "isoformat")) else ""
 
-                        # Fecha de caducidad (también puede venir como lista)
-                        raw_cad = (
-                                get_value_by_norm(row, "fechadecaducidad")
-                                or row.get("fecha de caducidad", None)
-                        )
-                        if isinstance(raw_cad, (list, tuple)):
-                            raw_cad = raw_cad[0] if raw_cad else None
-
-                        if raw_cad and hasattr(raw_cad, "isoformat"):
-                            fecha_cad_str = raw_cad.isoformat()
-                        elif raw_cad:
-                            fecha_cad_str = _to_str(raw_cad)
-                        else:
-                            fecha_cad_str = ""
-
-                        # Otros campos de la tabla
-                        proveedor = _to_str(row.get("PROVEEDOR", ""))
-                        factura = _to_str(row.get("FACTURA / TICKET", ""))
-                        sku = _to_str(row.get("SKU", ""))
-                        producto = _to_str(row.get("INSUMO", ""))
-                        temp = _to_float(row.get("TEMP (°C)", 0))
-                        calidad = _to_str(
-                            get_value_by_norm(row, "calidad(ok/rechazo)")
-                            or row.get("CALIDAD (OK / RECHAZO)", "OK")
-                        )
-                        obs = _to_str(row.get("OBSERVACIONES", ""))
-                        recibio = _to_str(row.get("RECIBIÓ", ""))
-                        aprobo = _to_str(row.get("APROBÓ", ""))
-
-                        # 🧮 Calculamos pendiente y estatus aquí
+                        # Calcular pendiente y estatus
                         cantidad_pendiente = max(cant_po - cant_rec, 0.0)
                         if cant_rec <= 0 and cantidad_pendiente > 0:
                             estatus_recep = "Pendiente"
@@ -1780,24 +1725,21 @@ elif vista == "📥 Recepción":
                         else:
                             estatus_recep = "Completado"
 
-                        # Construimos el diccionario en el formato que espera Apps Script
+                        # Construir registro
                         rec_data = {
-                            # Claves para identificar la fila de requerimiento
                             "ID_REQ": id_req_actual,
-                            "INSUMO": producto,
-                            "SKU": sku,
-
-                            # Campos de recepción que se escriben en la misma hoja "Requerimientos"
+                            "INSUMO": _to_str(row.get("INSUMO", "")),
+                            "SKU": _to_str(row.get("SKU", "")),
                             "Estatus Recepción": estatus_recep,
                             "Fecha de recepción app": fecha_str,
-                            "FACTURA / TICKET": factura,
+                            "FACTURA / TICKET": _to_str(row.get("FACTURA / TICKET", "")),
                             "CANTIDAD RECIBIDA": cant_rec,
                             "CANTIDAD PENDIENTE": cantidad_pendiente,
-                            "TEMP (°C)": temp,
-                            "CALIDAD (OK / RECHAZO)": calidad,
-                            "OBSERVACIONES RECEPCIÓN": obs,
-                            "RECIBIÓ": recibio,
-                            "APROBÓ": aprobo,
+                            "TEMP (°C)": _to_float(row.get("TEMP (°C)", 0)),
+                            "CALIDAD (OK / RECHAZO)": _to_str(row.get("CALIDAD (OK / RECHAZO)", "OK")),
+                            "OBSERVACIONES RECEPCIÓN": obs_linea,
+                            "RECIBIÓ": _to_str(row.get("RECIBIÓ", "")),
+                            "APROBÓ": _to_str(row.get("APROBÓ", "")),
                             "Folio Generado de Recepcion": folio_recep,
                             "fecha de caducidad": fecha_cad_str,
                         }
@@ -1806,13 +1748,27 @@ elif vista == "📥 Recepción":
 
                     if not lista_recepcion_data:
                         st.warning(
-                            "No hay líneas válidas para registrar (todas con cantidades 0 y sin observaciones). "
-                            "No se envió nada."
+                            "⚠️ No hay líneas válidas para registrar. "
+                            "Verifica que hayas capturado cantidades recibidas."
                         )
                     else:
-                        enviar_recepcion_a_gsheet(lista_recepcion_data)
-                        st.success("Recepción registrada correctamente en Google Sheets.")
+                        # Mostrar preview antes de enviar
+                        st.markdown("#### 📋 Preview de datos a enviar:")
+                        preview_df = pd.DataFrame(lista_recepcion_data)
+                        st.dataframe(
+                            preview_df[["INSUMO", "CANTIDAD RECIBIDA", "CANTIDAD PENDIENTE", "Estatus Recepción"]],
+                            use_container_width=True,
+                            hide_index=True
+                        )
 
+                        enviar_recepcion_a_gsheet(lista_recepcion_data)
+
+                        # Limpiar el estado después de enviar exitosamente
+                        if state_key in st.session_state:
+                            del st.session_state[state_key]
+
+                        st.success("✅ Recepción registrada correctamente en Google Sheets.")
+                        st.info("💡 Puedes buscar otro requerimiento o actualizar la página.")
     # ---------- 5) Consulta de pendientes por requerimiento ----------
     st.markdown("---")
     st.markdown("### 🔍 Consulta de pendientes por requerimiento")
