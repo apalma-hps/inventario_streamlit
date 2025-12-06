@@ -34,6 +34,18 @@ def norm(s: str) -> str:
     """Alias de _normalize_text para nombres de columnas, etc."""
     return _normalize_text(s)
 
+def get_value_by_norm(row, target_norm: str):
+    """
+    Dado un Series (row) y un nombre normalizado (por ejemplo 'cantidadrecibida'),
+    busca la columna cuyo nombre normalizado coincida y regresa su valor.
+    Si no la encuentra, regresa None.
+    """
+    for col_name, val in row.items():
+        if norm(str(col_name)) == target_norm:
+            return val
+    return None
+
+
 
 def norm_producto(s: str) -> str:
     """
@@ -1628,6 +1640,25 @@ elif vista == "📥 Recepción":
             col_btn1, col_btn2 = st.columns(2)
             btn_enviar_recep = col_btn2.button("✅ Confirmar y registrar recepción")
 
+
+            # Helpers locales para tipos
+            def _to_float(x):
+                try:
+                    if x is None:
+                        return 0.0
+                    if isinstance(x, str) and x.strip() == "":
+                        return 0.0
+                    return float(x)
+                except Exception:
+                    return 0.0
+
+
+            def _to_str(x):
+                if x is None:
+                    return ""
+                return str(x)
+
+
             if btn_enviar_recep:
                 errores = []
 
@@ -1645,30 +1676,22 @@ elif vista == "📥 Recepción":
                 # 🔍 Validación por fila
                 if edited_df is not None:
                     for _, row in edited_df.iterrows():
-                        # Normalizamos llaves para evitar problemas por cambios mínimos en encabezados
-                        row_norm = {norm(str(k)): v for k, v in row.items()}
+                        # Leer la cantidad recibida usando nombre normalizado
+                        raw_cant_rec = get_value_by_norm(row, "cantidadrecibida")
+                        cant_rec = _to_float(raw_cant_rec)
 
+                        # Calidad y observaciones
+                        raw_calidad = (
+                                get_value_by_norm(row, "calidad(ok/rechazo)")
+                                or row.get("CALIDAD (OK / RECHAZO)", "OK")
+                        )
+                        calidad = _to_str(raw_calidad)
 
-                        def _to_float(x):
-                            try:
-                                if x is None:
-                                    return 0.0
-                                if isinstance(x, str) and x.strip() == "":
-                                    return 0.0
-                                return float(x)
-                            except Exception:
-                                return 0.0
-
-
-                        def _to_str(x):
-                            if x is None:
-                                return ""
-                            return str(x)
-
-
-                        cant_rec = _to_float(row_norm.get("cantidadrecibida", 0))
-                        calidad = _to_str(row_norm.get("calidad(ok/rechazo)", "OK"))
-                        obs = _to_str(row_norm.get("observaciones", ""))
+                        raw_obs = (
+                                get_value_by_norm(row, "observaciones")
+                                or row.get("OBSERVACIONES", "")
+                        )
+                        obs = _to_str(raw_obs)
 
                         # Regla: si no se recibe nada o es rechazo, debe haber observaciones
                         if (cant_rec == 0 or calidad == "RECHAZO") and obs.strip() == "":
@@ -1693,49 +1716,44 @@ elif vista == "📥 Recepción":
 
                     # 🚚 Construimos las filas a enviar a Apps Script
                     for _, row in edited_df.iterrows():
-                        # Normalizamos llaves una vez por fila
-                        row_norm = {norm(str(k)): v for k, v in row.items()}
-
-
-                        def _to_float(x):
-                            try:
-                                if x is None:
-                                    return 0.0
-                                if isinstance(x, str) and x.strip() == "":
-                                    return 0.0
-                                return float(x)
-                            except Exception:
-                                return 0.0
-
-
-                        def _to_str(x):
-                            if x is None:
-                                return ""
-                            return str(x)
-
-
-                        # Valores numéricos
+                        # CANTIDAD PO desde la tabla
                         cant_po = _to_float(row.get("CANTIDAD PO", 0))
-                        cant_rec = _to_float(row_norm.get("cantidadrecibida", 0))
+
+                        # CANTIDAD RECIBIDA desde columna editable (usando nombre normalizado)
+                        raw_cant_rec = get_value_by_norm(row, "cantidadrecibida")
+                        cant_rec = _to_float(raw_cant_rec)
 
                         # Si no hay nada relevante en la fila, la saltamos
                         obs_linea = _to_str(row.get("OBSERVACIONES", ""))
                         if cant_po == 0 and cant_rec == 0 and obs_linea.strip() == "":
                             continue
 
-                        # Fecha de recepción (columna editable)
-                        fecha_linea = row.get("Fecha de recepción", date.today())
-                        if hasattr(fecha_linea, "isoformat"):
-                            fecha_str = fecha_linea.isoformat()
-                        else:
-                            fecha_str = _to_str(fecha_linea)
+                        # Fecha de recepción (editable en la tabla)
+                        raw_fecha = (
+                                get_value_by_norm(row, "fechaderecepcion")
+                                or row.get("Fecha de recepción", date.today())
+                        )
+                        # Puede venir como date, datetime, string o lista (según Streamlit)
+                        if isinstance(raw_fecha, (list, tuple)):
+                            raw_fecha = raw_fecha[0] if raw_fecha else None
 
-                        # Fecha de caducidad (puede venir vacía)
-                        fecha_cad = row.get("fecha de caducidad", None)
-                        if fecha_cad and hasattr(fecha_cad, "isoformat"):
-                            fecha_cad_str = fecha_cad.isoformat()
-                        elif fecha_cad:
-                            fecha_cad_str = _to_str(fecha_cad)
+                        if hasattr(raw_fecha, "isoformat"):
+                            fecha_str = raw_fecha.isoformat()
+                        else:
+                            fecha_str = _to_str(raw_fecha)
+
+                        # Fecha de caducidad (también puede venir como lista)
+                        raw_cad = (
+                                get_value_by_norm(row, "fechadecaducidad")
+                                or row.get("fecha de caducidad", None)
+                        )
+                        if isinstance(raw_cad, (list, tuple)):
+                            raw_cad = raw_cad[0] if raw_cad else None
+
+                        if raw_cad and hasattr(raw_cad, "isoformat"):
+                            fecha_cad_str = raw_cad.isoformat()
+                        elif raw_cad:
+                            fecha_cad_str = _to_str(raw_cad)
                         else:
                             fecha_cad_str = ""
 
@@ -1745,18 +1763,22 @@ elif vista == "📥 Recepción":
                         sku = _to_str(row.get("SKU", ""))
                         producto = _to_str(row.get("INSUMO", ""))
                         temp = _to_float(row.get("TEMP (°C)", 0))
-                        calidad = _to_str(row.get("CALIDAD (OK / RECHAZO)", "OK"))
+                        calidad = _to_str(
+                            get_value_by_norm(row, "calidad(ok/rechazo)")
+                            or row.get("CALIDAD (OK / RECHAZO)", "OK")
+                        )
                         obs = _to_str(row.get("OBSERVACIONES", ""))
                         recibio = _to_str(row.get("RECIBIÓ", ""))
                         aprobo = _to_str(row.get("APROBÓ", ""))
 
-                        # 🧮 Aquí podrías calcular un estatus de recepción si quieres
-                        # por ahora lo dejamos vacío y lo puedes definir en Apps Script
-                        estatus_recep = ""
-
-                        # Si manejas "Cantidad pendiente" en GSheets o Apps Script,
-                        # aquí podrías mandar 0 y que se calcule allá:
-                        cantidad_pendiente = 0.0
+                        # 🧮 Calculamos pendiente y estatus aquí
+                        cantidad_pendiente = max(cant_po - cant_rec, 0.0)
+                        if cant_rec <= 0 and cantidad_pendiente > 0:
+                            estatus_recep = "Pendiente"
+                        elif cant_rec > 0 and cantidad_pendiente > 0:
+                            estatus_recep = "Parcial"
+                        else:
+                            estatus_recep = "Completado"
 
                         # Construimos el diccionario en el formato que espera Apps Script
                         rec_data = {
