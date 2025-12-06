@@ -1567,17 +1567,20 @@ elif vista == "📥 Recepción":
             base_df["fecha de caducidad"] = pd.NaT  # 👈 fecha vacía correcta
 
             # 3.2 Manejo de estado para que el PRIMER click ya tenga datos
-            state_key = f"recep_{id_req_actual or 'sin_folio'}"
+            # 👉 Un key para el DataFrame en session_state
+            state_key = f"recep_df_{id_req_actual or 'sin_folio'}"
+            # 👉 Un key DISTINTO para el widget
+            editor_key = f"recep_editor_{id_req_actual or 'sin_folio'}"
 
-            # Inicializar SOLO si no existe
+            # Inicializar SOLO si no existe el DF en session_state
             if state_key not in st.session_state:
                 st.session_state[state_key] = base_df.copy()
             else:
-                # Por seguridad, si por alguna razón se guardó algo que no es DF, lo reseteamos
+                # Por seguridad, si por alguna razón no es un DataFrame, lo reseteamos
                 if not isinstance(st.session_state[state_key], pd.DataFrame):
                     st.session_state[state_key] = base_df.copy()
 
-            # 3.3 Mostrar el data_editor y ACTUALIZAR el estado con lo editado
+            # 3.3 Mostrar el data_editor y actualizar el DF en sesión
             edited_df = st.data_editor(
                 st.session_state[state_key],
                 column_config={
@@ -1637,10 +1640,10 @@ elif vista == "📥 Recepción":
                 },
                 num_rows="fixed",
                 use_container_width=True,
-                key=state_key,  # puedes usar el mismo state_key como key del widget
+                key=editor_key,  # 👈 key del widget, distinto al del DF
             )
 
-            # Actualizar el DataFrame en sesión con lo que editó el usuario
+            # Actualizar SOLO nuestro DF, NO el key del widget
             st.session_state[state_key] = edited_df
 
             st.markdown(
