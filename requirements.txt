@@ -5,3 +5,4 @@ requests
 openpyxl
 xlsxwriter
 altair
+unicode
