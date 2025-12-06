@@ -5,5 +5,4 @@ requests
 openpyxl
 xlsxwriter
 altair
-unicodedata
-random
+unicode
