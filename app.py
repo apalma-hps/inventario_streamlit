@@ -1518,7 +1518,6 @@ elif vista == "📥 Recepción":
         )
 
         # ---------- 3) Tabla editable: recepción por insumo ----------
-        
         st.markdown("### 📦 Registro de recepción por insumo")
 
         if "INSUMO" not in df_req_folio.columns or "CANTIDAD" not in df_req_folio.columns:
@@ -1527,7 +1526,6 @@ elif vista == "📥 Recepción":
                 "para construir la tabla de recepción."
             )
         else:
-            # 3.1 Base de recepción (siempre la misma para un ID_REQ)
             if "SKU" in df_req_folio.columns:
                 base_df = (
                     df_req_folio.groupby(["INSUMO", "SKU"], as_index=False)["CANTIDAD"]
@@ -1541,7 +1539,7 @@ elif vista == "📥 Recepción":
                     .rename(columns={"CANTIDAD": "CANTIDAD PO"})
                 )
 
-            # Proveedor por INSUMO
+            # PROVEEDOR POR INSUMO, tomando lo que venga en Requerimientos
             if "PROVEDOR" in df_req_folio.columns:
                 prov_por_insumo = (
                     df_req_folio[["INSUMO", "PROVEDOR"]]
@@ -1558,7 +1556,7 @@ elif vista == "📥 Recepción":
             else:
                 base_df["PROVEEDOR"] = ""
 
-            # Campos por defecto (compatibles con data_editor)
+            # Valores por defecto (importante para tipos)
             base_df["Fecha de recepción"] = date.today()
             base_df["FACTURA / TICKET"] = ""
             base_df["RECIBIÓ"] = ""
@@ -1566,15 +1564,25 @@ elif vista == "📥 Recepción":
             base_df["TEMP (°C)"] = 0.0
             base_df["CALIDAD (OK / RECHAZO)"] = "OK"
             base_df["OBSERVACIONES"] = ""
-            base_df["fecha de caducidad"] = pd.NaT  # 👈 importante para DateColumn
+            base_df["fecha de caducidad"] = pd.NaT  # 👈 fecha vacía correcta
 
             # 3.2 Manejo de estado para que el PRIMER click ya tenga datos
             state_key = f"recep_{id_req_actual or 'sin_folio'}"
+            editor_key = f"editor_{state_key}"
 
+            # Inicializar SOLO si no existe
             if state_key not in st.session_state:
-                # Primera vez que se carga ese folio
                 st.session_state[state_key] = base_df.copy()
 
+
+            # 🔥 Callback: cada vez que cambie la tabla, actualizamos el estado
+            def actualizar_tabla():
+                nuevo_df = st.session_state.get(editor_key)
+                if nuevo_df is not None:
+                    st.session_state[state_key] = nuevo_df.copy()
+
+
+            # Mostrar el data_editor con callback
             edited_df = st.data_editor(
                 st.session_state[state_key],
                 column_config={
@@ -1600,20 +1608,20 @@ elif vista == "📥 Recepción":
                     ),
                     "FACTURA / TICKET": st.column_config.TextColumn(
                         "FACTURA / TICKET",
-                        help="Número de factura o ticket.",
+                        help="A llenar: número de factura o ticket.",
                     ),
                     "RECIBIÓ": st.column_config.TextColumn(
                         "RECIBIÓ",
-                        help="Persona que recibe ese producto.",
+                        help="A llenar: persona que recibe ese producto.",
                     ),
                     "CANTIDAD RECIBIDA": st.column_config.NumberColumn(
                         "CANTIDAD RECIBIDA",
-                        help="Cantidad realmente recibida.",
+                        help="A llenar: cuánto llegó realmente.",
                         min_value=0.0,
                     ),
                     "TEMP (°C)": st.column_config.NumberColumn(
                         "TEMP (°C)",
-                        help="Temperatura al recibir (si aplica).",
+                        help="A llenar: temperatura al recibir (si aplica).",
                         min_value=-50.0,
                         max_value=100.0,
                         step=0.5,
@@ -1621,11 +1629,11 @@ elif vista == "📥 Recepción":
                     "CALIDAD (OK / RECHAZO)": st.column_config.SelectboxColumn(
                         "CALIDAD (OK / RECHAZO)",
                         options=["OK", "RECHAZO"],
-                        help="Indica si se acepta o se rechaza.",
+                        help="A llenar: indica si se acepta o se rechaza.",
                     ),
                     "OBSERVACIONES": st.column_config.TextColumn(
                         "OBSERVACIONES",
-                        help="Obligatorio si hay RECHAZO o no se recibe nada.",
+                        help="Obligatorio si no se recibió nada o hay rechazo.",
                     ),
                     "fecha de caducidad": st.column_config.DateColumn(
                         "Fecha de caducidad",
@@ -1634,16 +1642,14 @@ elif vista == "📥 Recepción":
                 },
                 num_rows="fixed",
                 use_container_width=True,
-                key=f"editor_{state_key}",
+                key=editor_key,  # 👈 importante: coincide con el del callback
+                on_change=actualizar_tabla,
             )
-
-            # 🔴 CRÍTICO: guardar SIEMPRE lo editado en el estado
-            st.session_state[state_key] = edited_df.copy()
 
             st.markdown(
                 "> **Producto / Cantidad PO / PROVEEDOR** vienen del requerimiento y están bloqueados.  \n"
-                "> Llena por fila: Fecha de recepción, FACTURA / TICKET, RECIBIÓ, "
-                "CANTIDAD RECIBIDA, TEMP, CALIDAD, OBSERVACIONES y fecha de caducidad."
+                "> Los campos **Fecha de recepción, FACTURA / TICKET, RECIBIÓ, CANTIDAD RECIBIDA, TEMP, CALIDAD, "
+                "OBSERVACIONES y fecha de caducidad** se llenan por cada fila."
             )
 
             # 3.3 Botones
