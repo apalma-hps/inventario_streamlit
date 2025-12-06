@@ -1551,13 +1551,17 @@ elif vista == "📥 Recepción":
             base_df["OBSERVACIONES"] = ""
             base_df["fecha de caducidad"] = pd.NaT
 
-            editor_key = f"recep_editor_{id_req_actual or 'sin_folio'}"
+            # 🔑 Claves separadas: una para el widget, otra para el DataFrame en sesión
+            editor_key = f"recep_editor_{id_req_actual or 'sin_folio'}"  # key del widget
+            df_key = f"recep_df_{id_req_actual or 'sin_folio'}"  # key del DataFrame
 
-            if editor_key not in st.session_state:
-                st.session_state[editor_key] = base_df.copy()
+            # Inicializar el DF base en sesión SOLO una vez por folio
+            if df_key not in st.session_state:
+                st.session_state[df_key] = base_df.copy()
 
+            # Mostrar el editor usando el DF de sesión, pero con un key de widget distinto
             edited_df = st.data_editor(
-                st.session_state[editor_key],
+                st.session_state[df_key],
                 column_config={
                     "INSUMO": st.column_config.TextColumn(
                         "Producto", disabled=True
@@ -1614,11 +1618,11 @@ elif vista == "📥 Recepción":
                 },
                 num_rows="fixed",
                 use_container_width=True,
-                key=editor_key,
+                key=editor_key,  # 👈 key del widget (DISTINTO del DF)
             )
 
-            # Guardamos el DF editado en sesión (por claridad; Streamlit ya lo hace, pero lo dejamos explícito)
-            st.session_state[editor_key] = edited_df
+            # Guardar el DF editado en sesión (en df_key, NO en editor_key)
+            st.session_state[df_key] = edited_df
 
             st.markdown(
                 "> **Producto / Cantidad PO / PROVEEDOR / UNIDAD DE MEDIDA** vienen del requerimiento y están bloqueados.  \n"
@@ -1631,7 +1635,7 @@ elif vista == "📥 Recepción":
             btn_enviar_recep = col_btn2.button("✅ Confirmar y registrar recepción")
 
             if btn_limpiar:
-                st.session_state[editor_key] = base_df.copy()
+                st.session_state[df_key] = base_df.copy()
                 st.rerun()
 
             if btn_enviar_recep:
@@ -1643,7 +1647,8 @@ elif vista == "📥 Recepción":
                         "Vuelve a buscar el folio antes de registrar la recepción."
                     )
 
-                df_envio = st.session_state[editor_key].copy()
+                df_envio = st.session_state[df_key].copy()
+
                 if df_envio.empty:
                     errores.append("La tabla de recepción está vacía.")
 
