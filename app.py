@@ -8,6 +8,9 @@ import requests
 import altair as alt
 import unicodedata
 
+# --------------------------------------------------
+# Utilidades de normalización de texto
+# --------------------------------------------------
 def _normalize_text(s: str) -> str:
     """
     Normaliza texto para comparaciones robustas:
@@ -34,6 +37,7 @@ def norm(s: str) -> str:
     """Alias de _normalize_text para nombres de columnas, etc."""
     return _normalize_text(s)
 
+
 def get_value_by_norm(row, target_norm: str):
     """
     Dado un Series (row) y un nombre normalizado (por ejemplo 'cantidadrecibida'),
@@ -46,25 +50,22 @@ def get_value_by_norm(row, target_norm: str):
     return None
 
 
-
 def norm_producto(s: str) -> str:
-    """
-    Normalizador específico para nombres de producto.
-    Si quisieras permitir más cosas (como guiones, etc.) lo puedes ajustar,
-    pero para efectos de clave funciona igual.
-    """
+    """Normalizador específico para nombres de producto."""
     return _normalize_text(s)
 
 
-
+# --------------------------------------------------
+# Tema Altair
+# --------------------------------------------------
 def hp_altair_theme():
     return {
         "config": {
             "background": "rgba(0,0,0,0)",
             "view": {"stroke": "transparent"},
             "axis": {
-                "labelColor": "#64748B",   # slate-500
-                "titleColor": "#0F172A",   # slate-900
+                "labelColor": "#64748B",
+                "titleColor": "#0F172A",
                 "gridColor": "#E5E7EB",
             },
             "legend": {
@@ -76,7 +77,7 @@ def hp_altair_theme():
             },
             "range": {
                 "category": [
-                    "#0F172A",  # negro para Masaryk
+                    "#0F172A",  # negro
                     "#06B6D4",  # cyan
                     "#A855F7",  # violeta
                     "#22C55E",  # verde
@@ -92,7 +93,10 @@ alt.themes.register("hp_theme", hp_altair_theme)
 alt.themes.enable("hp_theme")
 
 # Logo HP del dashboard de ventas
-LOGO_URL = "https://raw.githubusercontent.com/apalma-hps/Dashboard-Ventas-HP/49cbb064b6dcf8eecaa4fb39292d9fe94f357d49/logo_hp.png"
+LOGO_URL = (
+    "https://raw.githubusercontent.com/apalma-hps/Dashboard-Ventas-HP/"
+    "49cbb064b6dcf8eecaa4fb39292d9fe94f357d49/logo_hp.png"
+)
 
 # --------------------------------------------------
 # Configuración básica de la página
@@ -100,7 +104,7 @@ LOGO_URL = "https://raw.githubusercontent.com/apalma-hps/Dashboard-Ventas-HP/49c
 st.set_page_config(
     page_title="Inventario – Movimientos",
     page_icon=LOGO_URL,
-    layout="wide"
+    layout="wide",
 )
 
 # --------------------------------------------------
@@ -418,7 +422,6 @@ REQUERIMIENTOS_COLUMNS = [
     "SKU",
 ]
 
-
 # --------------------------------------------------
 # Columnas en la hoja de Recepción
 # --------------------------------------------------
@@ -439,9 +442,8 @@ RECEPCION_COLUMNS = [
     "APROBÓ",
     "ID DE REQUERIMIENTO AL QUE CORRESPONDE",
     "Folio Generado de Recepcion",
-    "fecha de caducidad",   # 👈 NUEVA COLUMNA
+    "fecha de caducidad",
 ]
-
 
 # --------------------------------------------------
 # Inicializar session_state
@@ -465,9 +467,22 @@ if "req_recepcion_df" not in st.session_state:
 if "req_recepcion_id" not in st.session_state:
     st.session_state["req_recepcion_id"] = ""
 
-# DataFrame editable de recepción
+# DataFrame editable de recepción (ya no lo usamos directamente, pero no estorba)
 if "tabla_recepcion_df" not in st.session_state:
     st.session_state["tabla_recepcion_df"] = None
+
+# --------------------------------------------------
+# Función segura a float
+# --------------------------------------------------
+def _to_float(x) -> float:
+    """Convierte a float de forma segura (None, '', listas, etc.)."""
+    if isinstance(x, (list, tuple)):
+        x = x[0] if x else 0
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return 0.0
+
 
 # --------------------------------------------------
 # Funciones auxiliares – Inventario
@@ -479,11 +494,7 @@ def load_movimientos_template_from_gsheet() -> pd.DataFrame:
     try:
         df = pd.read_csv(sheet_url, nrows=0)
     except pd.errors.ParserError:
-        df_full = pd.read_csv(
-            sheet_url,
-            engine="python",
-            on_bad_lines="skip"
-        )
+        df_full = pd.read_csv(sheet_url, engine="python", on_bad_lines="skip")
         df = df_full.iloc[0:0].copy()
 
     df.columns = df.columns.str.strip()
@@ -555,17 +566,6 @@ def generar_folio_inventario() -> (str, str, str):
     hora = ahora.strftime("%H:%M:%S")
     return folio, fecha, hora
 
-def _to_float(x) -> float:
-    """Convierte a float de forma segura (None, '', listas, etc.)."""
-    # Si viene como lista/tupla (caso raro de data_editor), toma el primer elemento
-    if isinstance(x, (list, tuple)):
-        x = x[0] if x else 0
-    try:
-        return float(x)
-    except (TypeError, ValueError):
-        return 0.0
-
-
 
 def agregar_campos_sistema(df: pd.DataFrame, folio: str, fecha: str, hora: str) -> pd.DataFrame:
     df = df.copy()
@@ -574,9 +574,9 @@ def agregar_campos_sistema(df: pd.DataFrame, folio: str, fecha: str, hora: str) 
     df["Hora_Carga"] = hora
 
     ordered_cols = (
-        ["ID"] +
-        [c for c in USER_COLUMNS if c in df.columns] +
-        [c for c in ["Fecha_Carga", "Hora_Carga"] if c in df.columns]
+        ["ID"]
+        + [c for c in USER_COLUMNS if c in df.columns]
+        + [c for c in ["Fecha_Carga", "Hora_Carga"] if c in df.columns]
     )
     df = df[ordered_cols]
     return df
@@ -635,25 +635,6 @@ def enviar_a_consolidado(df: pd.DataFrame):
 # --------------------------------------------------
 @st.cache_data
 def load_catalogo_productos() -> pd.DataFrame:
-    """
-    Carga el catálogo desde CATALOGO_CSV_URL (misma hoja donde está Requerimientos),
-    asumiendo columnas:
-    - Nombre
-    - UdM de Compra
-    - Coste
-    - PU
-    - Categoría de producto
-    - Referencia interna
-    - Clave SAT
-    - Proveedor
-    y las normaliza a:
-    - Producto
-    - Categoria
-    - Referencia Interna
-    - UdM de Compra
-    - Proveedor
-    + PRODUCTO_KEY
-    """
     url = st.secrets.get("CATALOGO_CSV_URL", "")
     if not url:
         raise ValueError(
@@ -699,25 +680,17 @@ def load_catalogo_productos() -> pd.DataFrame:
     df["Referencia Interna"] = df["Referencia Interna"].astype(str).str.strip()
 
     df["UdM de Compra"] = (
-        df.get("UdM de Compra", "pz")
-        .astype(str)
-        .fillna("pz")
-        .str.strip()
+        df.get("UdM de Compra", "pz").astype(str).fillna("pz").str.strip()
     )
     df["Proveedor"] = (
-        df.get("Proveedor", "")
-        .astype(str)
-        .fillna("")
-        .str.strip()
+        df.get("Proveedor", "").astype(str).fillna("").str.strip()
     )
 
     df = df[
-        (df["Producto"] != "") &
-        (df["Producto"].str.lower() != "nan")
+        (df["Producto"] != "") & (df["Producto"].str.lower() != "nan")
     ].reset_index(drop=True)
 
     df["PRODUCTO_KEY"] = df["Producto"].apply(norm_producto)
-
     return df
 
 
@@ -732,11 +705,9 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
     except pd.errors.ParserError:
         df = pd.read_csv(url, engine="python", on_bad_lines="skip")
 
-    # Normalizamos nombres que pueden venir medio distintos
     rename_map = {}
     for col in df.columns:
         n = norm(col)
-
         if n == "idreq":
             rename_map[col] = "ID_REQ"
         elif n == "estatus":
@@ -752,7 +723,6 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
 
     df = df.rename(columns=rename_map)
     df.columns = df.columns.astype(str).str.strip()
-
     return df
 
 
@@ -798,7 +768,6 @@ def enviar_requerimientos_a_gsheet(lista_req_data):
         )
         return
 
-    # Construir las filas con el orden de REQUERIMIENTOS_COLUMNS
     rows = []
     for req_data in lista_req_data:
         row = [req_data.get(col, "") for col in REQUERIMIENTOS_COLUMNS]
@@ -809,18 +778,15 @@ def enviar_requerimientos_a_gsheet(lista_req_data):
     try:
         resp = requests.post(url, json=payload, timeout=10)
 
-        # --- DEBUG: mostrar SIEMPRE el cuerpo bruto que devuelve Apps Script ---
         st.markdown("#### Respuesta cruda de Apps Script (debug)")
         st.code(resp.text, language="json")
 
-        # Si el código HTTP no es 200, paramos aquí
         if resp.status_code != 200:
             st.error(
                 f"No se pudo enviar el requerimiento. Código HTTP: {resp.status_code}"
             )
             return
 
-        # Intentar parsear JSON, pero sin tronar la app si falla
         try:
             data = resp.json()
         except Exception as e:
@@ -831,7 +797,6 @@ def enviar_requerimientos_a_gsheet(lista_req_data):
             st.exception(e)
             return
 
-        # Si vino JSON, revisar el campo status
         status = data.get("status")
         if status == "ok":
             st.success(
@@ -849,16 +814,9 @@ def enviar_requerimientos_a_gsheet(lista_req_data):
         st.exception(e)
 
 
-
 def enviar_recepcion_a_gsheet(lista_recepcion_data):
     """
-    Envía a Apps Script una lista de dicts, cada uno con:
-    - ID_REQ
-    - INSUMO
-    - SKU
-    - campos de recepción (Fecha de recepción app, FACTURA / TICKET, etc.)
-    Apps Script se encarga de localizar la fila en la hoja "Requerimientos"
-    y actualizar las columnas de recepción.
+    Envía a Apps Script una lista de dicts ya "limpios" (sin NaN).
     """
     url = st.secrets.get("APPS_SCRIPT_RECEPCION_URL", "")
 
@@ -869,7 +827,6 @@ def enviar_recepcion_a_gsheet(lista_recepcion_data):
         )
         return
 
-    # 👉 mandamos directamente la lista de objetos
     payload = {"rows": lista_recepcion_data}
 
     try:
@@ -909,6 +866,7 @@ def enviar_recepcion_a_gsheet(lista_recepcion_data):
         st.error("Error al enviar la recepción a Google Sheets.")
         st.exception(e)
 
+
 def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
     url = st.secrets.get("APPS_SCRIPT_CATALOGO_URL", "")
     if not url:
@@ -939,7 +897,6 @@ def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
             )
             return
 
-        # Intentamos parsear JSON, pero sin tronar la app
         try:
             data = resp.json()
         except Exception as e:
@@ -1142,14 +1099,12 @@ elif vista == "📨 Requerimientos de producto":
                 if producto_final:
                     enviar_nuevo_producto_a_catalogo(
                         producto_final,
-                        categoria_item
+                        categoria_item,
                     )
             else:
                 mask = (
-                        productos_df["Producto"]
-                        .astype(str)
-                        .str.strip()
-                        == str(producto_final).strip()
+                    productos_df["Producto"].astype(str).str.strip()
+                    == str(producto_final).strip()
                 )
                 if mask.any():
                     row_prod = productos_df.loc[mask].iloc[0]
@@ -1249,8 +1204,6 @@ elif vista == "📨 Requerimientos de producto":
         if send_req:
             errores = []
 
-            # -------- Validación: FECHA REQUERIDA no puede ser sábado ni domingo --------
-            # (aplica para todos los CECOs)
             weekday_req = fecha_requerida.weekday()  # lunes=0 ... domingo=6
             if weekday_req >= 5:
                 st.warning(
@@ -1261,8 +1214,6 @@ elif vista == "📨 Requerimientos de producto":
                     "La *Fecha requerida (fecha de entrega)* debe ser un día hábil (lunes a viernes)."
                 )
 
-            # 🔎 Validación de lead time mínimo de 4 días
-            # ❗ NO aplica para Flautas Lamartine
             tz = pytz.timezone("America/Mexico_City")
             hoy = datetime.now(tz).date()
             diferencia_dias = (fecha_requerida - hoy).days
@@ -1277,7 +1228,6 @@ elif vista == "📨 Requerimientos de producto":
                         "La *Fecha requerida* debe ser al menos 4 días después de la fecha actual."
                     )
 
-            # 🔎 Validaciones existentes
             if not ceco_destino:
                 errores.append("Debes seleccionar el *CECO destino*.")
             if not st.session_state["carrito_req"]:
@@ -1292,7 +1242,6 @@ elif vista == "📨 Requerimientos de producto":
                 st.info(f"Folio de requerimiento generado: **{folio_req}**")
 
                 lista_req_data = []
-
                 for item in st.session_state["carrito_req"]:
                     req_data = {
                         "FECHA DE PEDIDO": fecha_creacion,
@@ -1312,7 +1261,6 @@ elif vista == "📨 Requerimientos de producto":
                         "Fecha aproximada de entrega": fecha_requerida.isoformat(),
                         "SKU": item.get("SKU", ""),
                     }
-
                     lista_req_data.append(req_data)
 
                 lista_req_data = sorted(
@@ -1330,7 +1278,7 @@ elif vista == "📨 Requerimientos de producto":
 
     _, col_f2 = st.columns(2)
     filtro_folio = col_f2.text_input(
-        "Buscar por folio (ID_REQ) (opcional, coincidencia parcial)",
+        "Buscar por folio (ID_REQ) (opcional, coincidencia exacta)",
         value="",
     )
 
@@ -1433,16 +1381,13 @@ elif vista == "📥 Recepción":
         "1) Consulta un requerimiento por folio **ID_REQ**.  \n"
         "2) Se cargará una tabla con los insumos del pedido.  \n"
         "3) En esa misma tabla, por **cada fila** captura: Fecha de recepción, Factura/Ticket, "
-        "Recibió, Cantidad recibida, Temperatura, Calidad y Observaciones.  \n"
+        "Recibió, Cantidad recibida, Temperatura, Calidad, Observaciones y Fecha de caducidad.  \n"
         "4) Registra todo en la hoja **'Recepción'** con un solo botón."
     )
 
-    # (catálogo, por si lo necesitas después, lo dejamos igual)
     try:
         catalogo_df = load_catalogo_productos()
-    except Exception as e:
-        st.error("No se pudo cargar el catálogo de productos.")
-        st.exception(e)
+    except Exception:
         catalogo_df = pd.DataFrame()
 
     # ---------- 1) Buscar requerimiento por folio ----------
@@ -1468,7 +1413,10 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                mask = req_df["ID_REQ"].astype(str).str.strip() == id_req_input.strip()
+                mask = (
+                    req_df["ID_REQ"].astype(str).str.strip()
+                    == id_req_input.strip()
+                )
                 df_req_folio = req_df[mask].copy()
 
                 if df_req_folio.empty:
@@ -1504,9 +1452,15 @@ elif vista == "📥 Recepción":
                 "INSUMO",
                 "UNIDAD DE MEDIDA",
                 "CANTIDAD",
-                "FECHA DE PEDIDO" if "FECHA DE PEDIDO" in df_req_folio.columns else None,
-                "FECHA DESEADA" if "FECHA DESEADA" in df_req_folio.columns else None,
-                "CECO_DESTINO" if "CECO_DESTINO" in df_req_folio.columns else None,
+                "FECHA DE PEDIDO"
+                if "FECHA DE PEDIDO" in df_req_folio.columns
+                else None,
+                "FECHA DESEADA"
+                if "FECHA DESEADA" in df_req_folio.columns
+                else None,
+                "CECO_DESTINO"
+                if "CECO_DESTINO" in df_req_folio.columns
+                else None,
             ]
             if c is not None and c in df_req_folio.columns
         ]
@@ -1526,21 +1480,22 @@ elif vista == "📥 Recepción":
                 "para construir la tabla de recepción."
             )
         else:
-            # Siempre agregamos por INSUMO para no perder productos sin SKU
             base_df = (
                 df_req_folio.groupby("INSUMO", as_index=False)["CANTIDAD"]
                 .sum()
                 .rename(columns={"CANTIDAD": "CANTIDAD PO"})
             )
 
-            # Si hay columna SKU, la anexamos por INSUMO (uno por producto)
+            # SKU
             if "SKU" in df_req_folio.columns:
                 sku_por_insumo = (
                     df_req_folio[["INSUMO", "SKU"]]
                     .dropna(subset=["INSUMO"])
                     .copy()
                 )
-                sku_por_insumo["INSUMO"] = sku_por_insumo["INSUMO"].astype(str).str.strip()
+                sku_por_insumo["INSUMO"] = (
+                    sku_por_insumo["INSUMO"].astype(str).str.strip()
+                )
                 sku_por_insumo = sku_por_insumo.drop_duplicates(subset=["INSUMO"])
 
                 base_df["INSUMO"] = base_df["INSUMO"].astype(str).str.strip()
@@ -1548,15 +1503,19 @@ elif vista == "📥 Recepción":
             else:
                 base_df["SKU"] = ""
 
-            # PROVEEDOR POR INSUMO, tomando lo que venga en Requerimientos
+            # PROVEEDOR
             if "PROVEDOR" in df_req_folio.columns:
                 prov_por_insumo = (
                     df_req_folio[["INSUMO", "PROVEDOR"]]
                     .dropna(subset=["INSUMO"])
                     .copy()
                 )
-                prov_por_insumo["INSUMO"] = prov_por_insumo["INSUMO"].astype(str).str.strip()
-                prov_por_insumo["PROVEDOR"] = prov_por_insumo["PROVEDOR"].astype(str).str.strip()
+                prov_por_insumo["INSUMO"] = (
+                    prov_por_insumo["INSUMO"].astype(str).str.strip()
+                )
+                prov_por_insumo["PROVEDOR"] = (
+                    prov_por_insumo["PROVEDOR"].astype(str).str.strip()
+                )
                 prov_por_insumo = prov_por_insumo.drop_duplicates(subset=["INSUMO"])
 
                 base_df["INSUMO"] = base_df["INSUMO"].astype(str).str.strip()
@@ -1565,7 +1524,24 @@ elif vista == "📥 Recepción":
             else:
                 base_df["PROVEEDOR"] = ""
 
-            # Valores por defecto (importante para tipos)
+            # UDM
+            if "UNIDAD DE MEDIDA" in df_req_folio.columns:
+                udm_por_insumo = (
+                    df_req_folio[["INSUMO", "UNIDAD DE MEDIDA"]]
+                    .dropna(subset=["INSUMO"])
+                    .copy()
+                )
+                udm_por_insumo["INSUMO"] = (
+                    udm_por_insumo["INSUMO"].astype(str).str.strip()
+                )
+                udm_por_insumo = udm_por_insumo.drop_duplicates(subset=["INSUMO"])
+
+                base_df["INSUMO"] = base_df["INSUMO"].astype(str).str.strip()
+                base_df = base_df.merge(udm_por_insumo, on="INSUMO", how="left")
+            else:
+                base_df["UNIDAD DE MEDIDA"] = "pz"
+
+            # Valores por defecto
             base_df["Fecha de recepción"] = date.today()
             base_df["FACTURA / TICKET"] = ""
             base_df["RECIBIÓ"] = ""
@@ -1573,41 +1549,30 @@ elif vista == "📥 Recepción":
             base_df["TEMP (°C)"] = 0.0
             base_df["CALIDAD (OK / RECHAZO)"] = "OK"
             base_df["OBSERVACIONES"] = ""
-            base_df["fecha de caducidad"] = pd.NaT  # 👈 fecha vacía correcta
+            base_df["fecha de caducidad"] = pd.NaT
 
-            # 3.2 Manejo de estado para que el PRIMER click ya tenga datos
-            # 👉 Un key para el DataFrame en session_state
-            state_key = f"recep_df_{id_req_actual or 'sin_folio'}"
-            # 👉 Un key DISTINTO para el widget
             editor_key = f"recep_editor_{id_req_actual or 'sin_folio'}"
 
-            # Inicializar SOLO si no existe el DF en session_state
-            if state_key not in st.session_state:
-                st.session_state[state_key] = base_df.copy()
-            else:
-                # Por seguridad, si por alguna razón no es un DataFrame, lo reseteamos
-                if not isinstance(st.session_state[state_key], pd.DataFrame):
-                    st.session_state[state_key] = base_df.copy()
+            if editor_key not in st.session_state:
+                st.session_state[editor_key] = base_df.copy()
 
-            # 3.3 Mostrar el data_editor y actualizar el DF en sesión
             edited_df = st.data_editor(
-                st.session_state[state_key],
+                st.session_state[editor_key],
                 column_config={
                     "INSUMO": st.column_config.TextColumn(
-                        "Producto",
-                        disabled=True,
+                        "Producto", disabled=True
                     ),
                     "SKU": st.column_config.TextColumn(
-                        "SKU",
-                        disabled=True,
+                        "SKU", disabled=True
                     ),
                     "CANTIDAD PO": st.column_config.NumberColumn(
-                        "Cantidad PO",
-                        disabled=True,
+                        "Cantidad PO", disabled=True
                     ),
                     "PROVEEDOR": st.column_config.TextColumn(
-                        "PROVEEDOR",
-                        disabled=True,
+                        "PROVEEDOR", disabled=True
+                    ),
+                    "UNIDAD DE MEDIDA": st.column_config.TextColumn(
+                        "UNIDAD DE MEDIDA", disabled=True
                     ),
                     "Fecha de recepción": st.column_config.DateColumn(
                         "Fecha de recepción",
@@ -1615,20 +1580,20 @@ elif vista == "📥 Recepción":
                     ),
                     "FACTURA / TICKET": st.column_config.TextColumn(
                         "FACTURA / TICKET",
-                        help="A llenar: número de factura o ticket.",
+                        help="Número de factura o ticket.",
                     ),
                     "RECIBIÓ": st.column_config.TextColumn(
                         "RECIBIÓ",
-                        help="A llenar: persona que recibe ese producto.",
+                        help="Persona que recibe ese producto.",
                     ),
                     "CANTIDAD RECIBIDA": st.column_config.NumberColumn(
                         "CANTIDAD RECIBIDA",
-                        help="A llenar: cuánto llegó realmente.",
+                        help="Cuánto llegó realmente.",
                         min_value=0.0,
                     ),
                     "TEMP (°C)": st.column_config.NumberColumn(
                         "TEMP (°C)",
-                        help="A llenar: temperatura al recibir (si aplica).",
+                        help="Temperatura al recibir (si aplica).",
                         min_value=-50.0,
                         max_value=100.0,
                         step=0.5,
@@ -1636,7 +1601,7 @@ elif vista == "📥 Recepción":
                     "CALIDAD (OK / RECHAZO)": st.column_config.SelectboxColumn(
                         "CALIDAD (OK / RECHAZO)",
                         options=["OK", "RECHAZO"],
-                        help="A llenar: indica si se acepta o se rechaza.",
+                        help="Indica si se acepta o se rechaza.",
                     ),
                     "OBSERVACIONES": st.column_config.TextColumn(
                         "OBSERVACIONES",
@@ -1649,25 +1614,24 @@ elif vista == "📥 Recepción":
                 },
                 num_rows="fixed",
                 use_container_width=True,
-                key=editor_key,  # 👈 key del widget, distinto al del DF
+                key=editor_key,
             )
 
-            # Actualizar SOLO nuestro DF, NO el key del widget
-            st.session_state[state_key] = edited_df
+            # Guardamos el DF editado en sesión (por claridad; Streamlit ya lo hace, pero lo dejamos explícito)
+            st.session_state[editor_key] = edited_df
 
             st.markdown(
-                "> **Producto / Cantidad PO / PROVEEDOR** vienen del requerimiento y están bloqueados.  \n"
+                "> **Producto / Cantidad PO / PROVEEDOR / UNIDAD DE MEDIDA** vienen del requerimiento y están bloqueados.  \n"
                 "> Los campos **Fecha de recepción, FACTURA / TICKET, RECIBIÓ, CANTIDAD RECIBIDA, TEMP, CALIDAD, "
                 "OBSERVACIONES y fecha de caducidad** se llenan por cada fila."
             )
 
-            # 3.3 Botones
             col_btn1, col_btn2 = st.columns(2)
             btn_limpiar = col_btn1.button("🧹 Limpiar tabla de recepción")
             btn_enviar_recep = col_btn2.button("✅ Confirmar y registrar recepción")
 
             if btn_limpiar:
-                st.session_state[state_key] = base_df.copy()
+                st.session_state[editor_key] = base_df.copy()
                 st.rerun()
 
             if btn_enviar_recep:
@@ -1679,15 +1643,18 @@ elif vista == "📥 Recepción":
                         "Vuelve a buscar el folio antes de registrar la recepción."
                     )
 
-                df_envio = st.session_state[state_key].copy()
-
+                df_envio = st.session_state[editor_key].copy()
                 if df_envio.empty:
                     errores.append("La tabla de recepción está vacía.")
 
-                # Validación por fila
+                # Reemplazar NaN por None para JSON
+                df_envio = df_envio.where(pd.notna(df_envio), None)
+
                 for _, row in df_envio.iterrows():
                     cant_rec = _to_float(row.get("CANTIDAD RECIBIDA", 0))
-                    calidad = str(row.get("CALIDAD (OK / RECHAZO)", "OK") or "OK")
+                    calidad = str(
+                        row.get("CALIDAD (OK / RECHAZO)", "OK") or "OK"
+                    ).strip().upper()
                     obs = str(row.get("OBSERVACIONES", "") or "").strip()
 
                     if (cant_rec == 0 or calidad == "RECHAZO") and obs == "":
@@ -1714,14 +1681,15 @@ elif vista == "📥 Recepción":
                         cant_rec = _to_float(row.get("CANTIDAD RECIBIDA", 0))
                         obs = str(row.get("OBSERVACIONES", "") or "")
 
-                        # Si realmente está todo vacío, no la mandamos
                         if cant_po == 0 and cant_rec == 0 and obs.strip() == "":
                             continue
 
                         # Fecha de recepción
-                        fecha_linea = row.get("Fecha de recepción", date.today())
+                        fecha_linea = row.get("Fecha de recepción") or date.today()
                         if isinstance(fecha_linea, (list, tuple)):
-                            fecha_linea = fecha_linea[0] if fecha_linea else date.today()
+                            fecha_linea = (
+                                fecha_linea[0] if fecha_linea else date.today()
+                            )
                         if hasattr(fecha_linea, "isoformat"):
                             fecha_str = fecha_linea.isoformat()
                         else:
@@ -1732,7 +1700,7 @@ elif vista == "📥 Recepción":
                         if isinstance(fecha_cad, (list, tuple)):
                             fecha_cad = fecha_cad[0] if fecha_cad else None
 
-                        if pd.isna(fecha_cad):
+                        if not fecha_cad:
                             fecha_cad_str = ""
                         elif hasattr(fecha_cad, "isoformat"):
                             fecha_cad_str = fecha_cad.isoformat()
@@ -1741,17 +1709,35 @@ elif vista == "📥 Recepción":
 
                         rec_data = {
                             "Fecha de recepción": fecha_str,
-                            "PROVEEDOR": row.get("PROVEEDOR", ""),
-                            "FACTURA / TICKET": row.get("FACTURA / TICKET", ""),
-                            "SKU": row.get("SKU", ""),
-                            "PRODUCTO": row.get("INSUMO", ""),
-                            "UNIDAD DE MEDIDA": "pz",
+                            "PROVEEDOR": (
+                                "" if row.get("PROVEEDOR") is None else str(row.get("PROVEEDOR"))
+                            ),
+                            "FACTURA / TICKET": (
+                                ""
+                                if row.get("FACTURA / TICKET") is None
+                                else str(row.get("FACTURA / TICKET"))
+                            ),
+                            "SKU": (
+                                "" if row.get("SKU") is None else str(row.get("SKU"))
+                            ),
+                            "PRODUCTO": (
+                                "" if row.get("INSUMO") is None else str(row.get("INSUMO"))
+                            ),
+                            "UNIDAD DE MEDIDA": (
+                                ""
+                                if row.get("UNIDAD DE MEDIDA") is None
+                                else str(row.get("UNIDAD DE MEDIDA"))
+                            ),
                             "CANTIDAD PO": cant_po,
                             "CANTIDAD RECIBIDA": cant_rec,
                             "TEMP (°C)": _to_float(row.get("TEMP (°C)", 0)),
-                            "CALIDAD (OK / RECHAZO)": row.get("CALIDAD (OK / RECHAZO)", "OK"),
+                            "CALIDAD (OK / RECHAZO)": row.get(
+                                "CALIDAD (OK / RECHAZO)", "OK"
+                            ),
                             "OBSERVACIONES": obs,
-                            "RECIBIÓ": row.get("RECIBIÓ", ""),
+                            "RECIBIÓ": (
+                                "" if row.get("RECIBIÓ") is None else str(row.get("RECIBIÓ"))
+                            ),
                             "FOLIO": "",
                             "APROBÓ": "",
                             "ID DE REQUERIMIENTO AL QUE CORRESPONDE": id_req_actual,
@@ -1787,9 +1773,6 @@ elif vista == "📥 Recepción":
                 req_df = load_requerimientos_from_gsheet()
                 req_df.columns = req_df.columns.astype(str).str.strip()
 
-               # st.markdown("#### Columnas leídas de Requerimientos (debug)")
-                #st.write(list(req_df.columns))
-
                 if "ID_REQ" not in req_df.columns:
                     st.error(
                         "La hoja de Requerimientos no tiene la columna 'ID_REQ'. "
@@ -1797,7 +1780,6 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                # Filtrar por folio
                 req_folio = req_df[
                     req_df["ID_REQ"].astype(str).str.strip() == id_req_pend.strip()
                 ].copy()
@@ -1808,7 +1790,6 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                # Columna de producto
                 if "INSUMO" in req_folio.columns:
                     col_prod_req = "INSUMO"
                 elif "PRODUCTO" in req_folio.columns:
@@ -1820,7 +1801,6 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                # Localizar columna 'CANTIDAD PENDIENTE'
                 col_cant_pend = None
                 for c in req_folio.columns:
                     if norm(c) == "cantidadpendiente":
@@ -1839,12 +1819,10 @@ elif vista == "📥 Recepción":
                     f"Usando columna de pendiente: **{col_cant_pend}** (normalizada)"
                 )
 
-                # A número
                 req_folio[col_cant_pend] = pd.to_numeric(
                     req_folio[col_cant_pend], errors="coerce"
                 ).fillna(0.0)
 
-                # Solo filas con pendiente > 0
                 req_pend = req_folio[req_folio[col_cant_pend] > 0].copy()
 
                 if req_pend.empty:
@@ -1853,28 +1831,22 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                # ---- Versión simple: mostramos exactamente las filas con pendiente > 0 ----
-                # Tomamos solo las columnas relevantes
                 cols_base = [col_prod_req, col_cant_pend]
                 if "SKU" in req_pend.columns:
-                    cols_base.insert(1, "SKU")  # PRODUCTO, SKU, CANTIDAD PENDIENTE
+                    cols_base.insert(1, "SKU")
 
                 pend_df = req_pend[cols_base].copy()
 
-                # Renombramos para mostrar bonito
                 rename_map = {col_prod_req: "PRODUCTO", col_cant_pend: "PENDIENTE"}
                 pend_df = pend_df.rename(columns=rename_map)
 
-                # A número y nos quedamos solo con PENDIENTE > 0 (por seguridad)
                 pend_df["PENDIENTE"] = pd.to_numeric(
                     pend_df["PENDIENTE"], errors="coerce"
                 ).fillna(0.0)
                 pend_df = pend_df[pend_df["PENDIENTE"] > 0]
 
-                # Ordenamos de mayor a menor pendiente
                 pend_df = pend_df.sort_values("PENDIENTE", ascending=False)
 
-                # Columnas a mostrar
                 if "SKU" in pend_df.columns:
                     cols_mostrar = ["SKU", "PRODUCTO", "PENDIENTE"]
                 else:
@@ -1889,7 +1861,6 @@ elif vista == "📥 Recepción":
                     hide_index=True,
                 )
 
-                # Total pendiente
                 total_pend = pend_df["PENDIENTE"].sum()
 
                 st.info(
@@ -1900,4 +1871,3 @@ elif vista == "📥 Recepción":
             except Exception as e:
                 st.error("Ocurrió un error al calcular los pendientes.")
                 st.exception(e)
-
