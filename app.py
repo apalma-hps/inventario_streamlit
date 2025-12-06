@@ -1809,135 +1809,136 @@ elif vista == "📥 Recepción":
                         enviar_recepcion_a_gsheet(lista_recepcion_data)
                         st.success("Recepción registrada correctamente en Google Sheets.")
 
-# ---------- 5) Consulta de pendientes por requerimiento ----------
-st.markdown("---")
-st.markdown("### 🔍 Consulta de pendientes por requerimiento")
 
-id_req_pend = st.text_input(
-    "Folio de requerimiento (ID_REQ) para ver productos pendientes",
-    key="id_req_pendientes",
-    help="Ejemplo: REQ-20251202-153045",
-)
+    # ---------- 5) Consulta de pendientes por requerimiento ----------
+    st.markdown("---")
+    st.markdown("### 🔍 Consulta de pendientes por requerimiento")
 
-if st.button("Calcular pendientes", key="btn_calc_pendientes"):
-    if not id_req_pend.strip():
-        st.error("Debes capturar un folio de requerimiento (ID_REQ).")
-    else:
-        try:
-            req_df = load_requerimientos_from_gsheet()
-            req_df.columns = req_df.columns.astype(str).str.strip()
+    id_req_pend = st.text_input(
+        "Folio de requerimiento (ID_REQ) para ver productos pendientes",
+        key="id_req_pendientes",
+        help="Ejemplo: REQ-20251202-153045",
+    )
 
-            # st.markdown("#### Columnas leídas de Requerimientos (debug)")
-            #st.write(list(req_df.columns))
+    if st.button("Calcular pendientes", key="btn_calc_pendientes"):
+        if not id_req_pend.strip():
+            st.error("Debes capturar un folio de requerimiento (ID_REQ).")
+        else:
+            try:
+                req_df = load_requerimientos_from_gsheet()
+                req_df.columns = req_df.columns.astype(str).str.strip()
 
-            if "ID_REQ" not in req_df.columns:
-                st.error(
-                    "La hoja de Requerimientos no tiene la columna 'ID_REQ'. "
-                    f"Columnas leídas: {list(req_df.columns)}"
-                )
-                st.stop()
+               # st.markdown("#### Columnas leídas de Requerimientos (debug)")
+                #st.write(list(req_df.columns))
 
-            # Filtrar por folio
-            req_folio = req_df[
-                req_df["ID_REQ"].astype(str).str.strip() == id_req_pend.strip()
+                if "ID_REQ" not in req_df.columns:
+                    st.error(
+                        "La hoja de Requerimientos no tiene la columna 'ID_REQ'. "
+                        f"Columnas leídas: {list(req_df.columns)}"
+                    )
+                    st.stop()
+
+                # Filtrar por folio
+                req_folio = req_df[
+                    req_df["ID_REQ"].astype(str).str.strip() == id_req_pend.strip()
                 ].copy()
 
-            if req_folio.empty:
-                st.warning(
-                    f"No se encontraron productos para el ID_REQ = '{id_req_pend}'."
+                if req_folio.empty:
+                    st.warning(
+                        f"No se encontraron productos para el ID_REQ = '{id_req_pend}'."
+                    )
+                    st.stop()
+
+                # Columna de producto
+                if "INSUMO" in req_folio.columns:
+                    col_prod_req = "INSUMO"
+                elif "PRODUCTO" in req_folio.columns:
+                    col_prod_req = "PRODUCTO"
+                else:
+                    st.error(
+                        "No se encontró una columna de producto ('INSUMO' o 'PRODUCTO') "
+                        "en la hoja de Requerimientos."
+                    )
+                    st.stop()
+
+                # Localizar columna 'CANTIDAD PENDIENTE'
+                col_cant_pend = None
+                for c in req_folio.columns:
+                    if norm(c) == "cantidadpendiente":
+                        col_cant_pend = c
+                        break
+
+                if col_cant_pend is None:
+                    st.error(
+                        "No se encontró la columna de 'CANTIDAD PENDIENTE' "
+                        "en la hoja de Requerimientos. "
+                        f"Columnas leídas: {list(req_folio.columns)}"
+                    )
+                    st.stop()
+
+                st.markdown(
+                    f"Usando columna de pendiente: **{col_cant_pend}** (normalizada)"
                 )
-                st.stop()
 
-            # Columna de producto
-            if "INSUMO" in req_folio.columns:
-                col_prod_req = "INSUMO"
-            elif "PRODUCTO" in req_folio.columns:
-                col_prod_req = "PRODUCTO"
-            else:
-                st.error(
-                    "No se encontró una columna de producto ('INSUMO' o 'PRODUCTO') "
-                    "en la hoja de Requerimientos."
+                # A número
+                req_folio[col_cant_pend] = pd.to_numeric(
+                    req_folio[col_cant_pend], errors="coerce"
+                ).fillna(0.0)
+
+                # Solo filas con pendiente > 0
+                req_pend = req_folio[req_folio[col_cant_pend] > 0].copy()
+
+                if req_pend.empty:
+                    st.info(
+                        f"El requerimiento `{id_req_pend}` no tiene productos pendientes. 🎉"
+                    )
+                    st.stop()
+
+                # ---- Versión simple: mostramos exactamente las filas con pendiente > 0 ----
+                # Tomamos solo las columnas relevantes
+                cols_base = [col_prod_req, col_cant_pend]
+                if "SKU" in req_pend.columns:
+                    cols_base.insert(1, "SKU")  # PRODUCTO, SKU, CANTIDAD PENDIENTE
+
+                pend_df = req_pend[cols_base].copy()
+
+                # Renombramos para mostrar bonito
+                rename_map = {col_prod_req: "PRODUCTO", col_cant_pend: "PENDIENTE"}
+                pend_df = pend_df.rename(columns=rename_map)
+
+                # A número y nos quedamos solo con PENDIENTE > 0 (por seguridad)
+                pend_df["PENDIENTE"] = pd.to_numeric(
+                    pend_df["PENDIENTE"], errors="coerce"
+                ).fillna(0.0)
+                pend_df = pend_df[pend_df["PENDIENTE"] > 0]
+
+                # Ordenamos de mayor a menor pendiente
+                pend_df = pend_df.sort_values("PENDIENTE", ascending=False)
+
+                # Columnas a mostrar
+                if "SKU" in pend_df.columns:
+                    cols_mostrar = ["SKU", "PRODUCTO", "PENDIENTE"]
+                else:
+                    cols_mostrar = ["PRODUCTO", "PENDIENTE"]
+
+                st.markdown(
+                    f"#### Resultado de pendientes para ID_REQ: `{id_req_pend}`"
                 )
-                st.stop()
-
-            # Localizar columna 'CANTIDAD PENDIENTE'
-            col_cant_pend = None
-            for c in req_folio.columns:
-                if norm(c) == "cantidadpendiente":
-                    col_cant_pend = c
-                    break
-
-            if col_cant_pend is None:
-                st.error(
-                    "No se encontró la columna de 'CANTIDAD PENDIENTE' "
-                    "en la hoja de Requerimientos. "
-                    f"Columnas leídas: {list(req_folio.columns)}"
+                st.dataframe(
+                    pend_df[cols_mostrar].reset_index(drop=True),
+                    use_container_width=True,
+                    hide_index=True,
                 )
-                st.stop()
 
-            st.markdown(
-                f"Usando columna de pendiente: **{col_cant_pend}** (normalizada)"
-            )
+                # Total pendiente
+                total_pend = pend_df["PENDIENTE"].sum()
 
-            # A número
-            req_folio[col_cant_pend] = pd.to_numeric(
-                req_folio[col_cant_pend], errors="coerce"
-            ).fillna(0.0)
-
-            # Solo filas con pendiente > 0
-            req_pend = req_folio[req_folio[col_cant_pend] > 0].copy()
-
-            if req_pend.empty:
                 st.info(
-                    f"El requerimiento `{id_req_pend}` no tiene productos pendientes. 🎉"
+                    f"**Resumen del requerimiento**  \n"
+                    f"- Cantidad pendiente total: **{total_pend:.2f}**"
                 )
-                st.stop()
 
-            # ---- Versión simple: mostramos exactamente las filas con pendiente > 0 ----
-            # Tomamos solo las columnas relevantes
-            cols_base = [col_prod_req, col_cant_pend]
-            if "SKU" in req_pend.columns:
-                cols_base.insert(1, "SKU")  # PRODUCTO, SKU, CANTIDAD PENDIENTE
-
-            pend_df = req_pend[cols_base].copy()
-
-            # Renombramos para mostrar bonito
-            rename_map = {col_prod_req: "PRODUCTO", col_cant_pend: "PENDIENTE"}
-            pend_df = pend_df.rename(columns=rename_map)
-
-            # A número y nos quedamos solo con PENDIENTE > 0 (por seguridad)
-            pend_df["PENDIENTE"] = pd.to_numeric(
-                pend_df["PENDIENTE"], errors="coerce"
-            ).fillna(0.0)
-            pend_df = pend_df[pend_df["PENDIENTE"] > 0]
-
-            # Ordenamos de mayor a menor pendiente
-            pend_df = pend_df.sort_values("PENDIENTE", ascending=False)
-
-            # Columnas a mostrar
-            if "SKU" in pend_df.columns:
-                cols_mostrar = ["SKU", "PRODUCTO", "PENDIENTE"]
-            else:
-                cols_mostrar = ["PRODUCTO", "PENDIENTE"]
-
-            st.markdown(
-                f"#### Resultado de pendientes para ID_REQ: `{id_req_pend}`"
-            )
-            st.dataframe(
-                pend_df[cols_mostrar].reset_index(drop=True),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            # Total pendiente
-            total_pend = pend_df["PENDIENTE"].sum()
-
-            st.info(
-                f"**Resumen del requerimiento**  \n"
-                f"- Cantidad pendiente total: **{total_pend:.2f}**"
-            )
-
-        except Exception as e:
-            st.error("Ocurrió un error al calcular los pendientes.")
-            st.exception(e)
+            except Exception as e:
+                st.error("Ocurrió un error al calcular los pendientes.")
+                st.exception(e)
 
