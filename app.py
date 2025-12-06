@@ -1642,14 +1642,36 @@ elif vista == "📥 Recepción":
                         "La tabla de recepción está vacía. Verifica el requerimiento."
                     )
 
-                # Validación por fila
+                # 🔍 Validación por fila
                 if edited_df is not None:
                     for _, row in edited_df.iterrows():
-                        cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
-                        calidad = str(row.get("CALIDAD (OK / RECHAZO)", "OK") or "OK")
-                        obs = str(row.get("OBSERVACIONES", "") or "").strip()
+                        # Normalizamos llaves para evitar problemas por cambios mínimos en encabezados
+                        row_norm = {norm(str(k)): v for k, v in row.items()}
 
-                        if (cant_rec == 0 or calidad == "RECHAZO") and obs == "":
+
+                        def _to_float(x):
+                            try:
+                                if x is None:
+                                    return 0.0
+                                if isinstance(x, str) and x.strip() == "":
+                                    return 0.0
+                                return float(x)
+                            except Exception:
+                                return 0.0
+
+
+                        def _to_str(x):
+                            if x is None:
+                                return ""
+                            return str(x)
+
+
+                        cant_rec = _to_float(row_norm.get("cantidadrecibida", 0))
+                        calidad = _to_str(row_norm.get("calidad(ok/rechazo)", "OK"))
+                        obs = _to_str(row_norm.get("observaciones", ""))
+
+                        # Regla: si no se recibe nada o es rechazo, debe haber observaciones
+                        if (cant_rec == 0 or calidad == "RECHAZO") and obs.strip() == "":
                             errores.append(
                                 f"En el producto '{row.get('INSUMO', '')}' la cantidad recibida es 0 o RECHAZO "
                                 "y no hay observaciones. Debes agregar una nota."
@@ -1668,46 +1690,92 @@ elif vista == "📥 Recepción":
                     )
 
                     lista_recepcion_data = []
-                    for _, row in edited_df.iterrows():
-                        cant_po = float(row.get("CANTIDAD PO", 0) or 0)
-                        cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
-                        obs = str(row.get("OBSERVACIONES", "") or "")
 
-                        if cant_po == 0 and cant_rec == 0 and obs.strip() == "":
+                    # 🚚 Construimos las filas a enviar a Apps Script
+                    for _, row in edited_df.iterrows():
+                        # Normalizamos llaves una vez por fila
+                        row_norm = {norm(str(k)): v for k, v in row.items()}
+
+
+                        def _to_float(x):
+                            try:
+                                if x is None:
+                                    return 0.0
+                                if isinstance(x, str) and x.strip() == "":
+                                    return 0.0
+                                return float(x)
+                            except Exception:
+                                return 0.0
+
+
+                        def _to_str(x):
+                            if x is None:
+                                return ""
+                            return str(x)
+
+
+                        # Valores numéricos
+                        cant_po = _to_float(row.get("CANTIDAD PO", 0))
+                        cant_rec = _to_float(row_norm.get("cantidadrecibida", 0))
+
+                        # Si no hay nada relevante en la fila, la saltamos
+                        obs_linea = _to_str(row.get("OBSERVACIONES", ""))
+                        if cant_po == 0 and cant_rec == 0 and obs_linea.strip() == "":
                             continue
 
-                        # Fecha de recepción
+                        # Fecha de recepción (columna editable)
                         fecha_linea = row.get("Fecha de recepción", date.today())
                         if hasattr(fecha_linea, "isoformat"):
                             fecha_str = fecha_linea.isoformat()
                         else:
-                            fecha_str = str(fecha_linea)
+                            fecha_str = _to_str(fecha_linea)
 
-                        # Fecha de caducidad
+                        # Fecha de caducidad (puede venir vacía)
                         fecha_cad = row.get("fecha de caducidad", None)
                         if fecha_cad and hasattr(fecha_cad, "isoformat"):
                             fecha_cad_str = fecha_cad.isoformat()
                         elif fecha_cad:
-                            fecha_cad_str = str(fecha_cad)
+                            fecha_cad_str = _to_str(fecha_cad)
                         else:
                             fecha_cad_str = ""
 
-                        rec_data = {
-                            # 🔑 claves para localizar la fila en "Requerimientos"
-                            "ID_REQ": id_req_actual,
-                            "INSUMO": row.get("INSUMO", ""),
-                            "SKU": row.get("SKU", ""),
+                        # Otros campos de la tabla
+                        proveedor = _to_str(row.get("PROVEEDOR", ""))
+                        factura = _to_str(row.get("FACTURA / TICKET", ""))
+                        sku = _to_str(row.get("SKU", ""))
+                        producto = _to_str(row.get("INSUMO", ""))
+                        temp = _to_float(row.get("TEMP (°C)", 0))
+                        calidad = _to_str(row.get("CALIDAD (OK / RECHAZO)", "OK"))
+                        obs = _to_str(row.get("OBSERVACIONES", ""))
+                        recibio = _to_str(row.get("RECIBIÓ", ""))
+                        aprobo = _to_str(row.get("APROBÓ", ""))
 
-                            # 🌐 columnas de recepción en la misma hoja "Requerimientos"
-                            "Estatus Recepción": "",  # lo calcularemos en Apps Script (Completado / Parcial)
+                        # 🧮 Aquí podrías calcular un estatus de recepción si quieres
+                        # por ahora lo dejamos vacío y lo puedes definir en Apps Script
+                        estatus_recep = ""
+
+                        # Si manejas "Cantidad pendiente" en GSheets o Apps Script,
+                        # aquí podrías mandar 0 y que se calcule allá:
+                        cantidad_pendiente = 0.0
+
+                        # Construimos el diccionario en el formato que espera Apps Script
+                        rec_data = {
+                            # Claves para identificar la fila de requerimiento
+                            "ID_REQ": id_req_actual,
+                            "INSUMO": producto,
+                            "SKU": sku,
+
+                            # Campos de recepción que se escriben en la misma hoja "Requerimientos"
+                            "Estatus Recepción": estatus_recep,
                             "Fecha de recepción app": fecha_str,
-                            "FACTURA / TICKET": row.get("FACTURA / TICKET", ""),
+                            "FACTURA / TICKET": factura,
                             "CANTIDAD RECIBIDA": cant_rec,
-                            "TEMP (°C)": float(row.get("TEMP (°C)", 0) or 0),
-                            "CALIDAD (OK / RECHAZO)": row.get("CALIDAD (OK / RECHAZO)", "OK"),
+                            "CANTIDAD PENDIENTE": cantidad_pendiente,
+                            "TEMP (°C)": temp,
+                            "CALIDAD (OK / RECHAZO)": calidad,
                             "OBSERVACIONES RECEPCIÓN": obs,
-                            "RECIBIÓ": row.get("RECIBIÓ", ""),
-                            "APROBÓ": "",  # lo pueden llenar después en la hoja
+                            "RECIBIÓ": recibio,
+                            "APROBÓ": aprobo,
                             "Folio Generado de Recepcion": folio_recep,
                             "fecha de caducidad": fecha_cad_str,
                         }
@@ -1722,11 +1790,6 @@ elif vista == "📥 Recepción":
                     else:
                         enviar_recepcion_a_gsheet(lista_recepcion_data)
                         st.success("Recepción registrada correctamente en Google Sheets.")
-
-    else:
-        st.info(
-            "Busca primero un folio de requerimiento (ID_REQ) para poder registrar la recepción."
-        )
 
     # ---------- 5) Consulta de pendientes por requerimiento ----------
     st.markdown("---")
