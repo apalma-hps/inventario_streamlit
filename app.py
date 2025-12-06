@@ -1505,7 +1505,7 @@ elif vista == "📥 Recepción":
             use_container_width=True,
             hide_index=True,
         )
-        
+
         # ---------- 3) Tabla editable: recepción por insumo ----------
         st.markdown("### 📦 Registro de recepción por insumo")
 
@@ -1515,11 +1515,18 @@ elif vista == "📥 Recepción":
                 "para construir la tabla de recepción."
             )
         else:
-            # 3.1 Base con productos del requerimiento (INSUMO, SKU, CANTIDAD PO)
+            # 3.1 Base con productos del requerimiento (INSUMO, CANTIDAD PO, y SKU opcional)
             if "SKU" in df_req_folio.columns:
+                tmp = df_req_folio.copy()
+                # No queremos que NaN en SKU haga que se pierdan filas
+                tmp["SKU"] = tmp["SKU"].fillna("")
+
                 base_df = (
-                    df_req_folio.groupby(["INSUMO", "SKU"], as_index=False)["CANTIDAD"]
-                    .sum()
+                    tmp.groupby("INSUMO", as_index=False)
+                    .agg({
+                        "CANTIDAD": "sum",
+                        "SKU": "first",  # tomamos el primer SKU disponible (aunque sea "")
+                    })
                     .rename(columns={"CANTIDAD": "CANTIDAD PO"})
                 )
             else:
