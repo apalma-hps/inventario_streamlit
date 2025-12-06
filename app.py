@@ -1824,10 +1824,11 @@ if st.button("Calcular pendientes", key="btn_calc_pendientes"):
         st.error("Debes capturar un folio de requerimiento (ID_REQ).")
     else:
         try:
-            # 🔥 IMPORTANTE: forzar recarga desde Google Sheets
-            load_requerimientos_from_gsheet.clear()
             req_df = load_requerimientos_from_gsheet()
             req_df.columns = req_df.columns.astype(str).str.strip()
+
+            # st.markdown("#### Columnas leídas de Requerimientos (debug)")
+            #st.write(list(req_df.columns))
 
             if "ID_REQ" not in req_df.columns:
                 st.error(
@@ -1836,9 +1837,10 @@ if st.button("Calcular pendientes", key="btn_calc_pendientes"):
                 )
                 st.stop()
 
+            # Filtrar por folio
             req_folio = req_df[
                 req_df["ID_REQ"].astype(str).str.strip() == id_req_pend.strip()
-            ].copy()
+                ].copy()
 
             if req_folio.empty:
                 st.warning(
@@ -1858,7 +1860,7 @@ if st.button("Calcular pendientes", key="btn_calc_pendientes"):
                 )
                 st.stop()
 
-            # Buscar 'CANTIDAD PENDIENTE'
+            # Localizar columna 'CANTIDAD PENDIENTE'
             col_cant_pend = None
             for c in req_folio.columns:
                 if norm(c) == "cantidadpendiente":
@@ -1868,9 +1870,14 @@ if st.button("Calcular pendientes", key="btn_calc_pendientes"):
             if col_cant_pend is None:
                 st.error(
                     "No se encontró la columna de 'CANTIDAD PENDIENTE' "
-                    "en la hoja de Requerimientos."
+                    "en la hoja de Requerimientos. "
+                    f"Columnas leídas: {list(req_folio.columns)}"
                 )
                 st.stop()
+
+            st.markdown(
+                f"Usando columna de pendiente: **{col_cant_pend}** (normalizada)"
+            )
 
             # A número
             req_folio[col_cant_pend] = pd.to_numeric(
@@ -1886,22 +1893,28 @@ if st.button("Calcular pendientes", key="btn_calc_pendientes"):
                 )
                 st.stop()
 
-            # Armar dataframe de salida
+            # ---- Versión simple: mostramos exactamente las filas con pendiente > 0 ----
+            # Tomamos solo las columnas relevantes
             cols_base = [col_prod_req, col_cant_pend]
             if "SKU" in req_pend.columns:
-                cols_base.insert(1, "SKU")
+                cols_base.insert(1, "SKU")  # PRODUCTO, SKU, CANTIDAD PENDIENTE
 
             pend_df = req_pend[cols_base].copy()
-            pend_df = pend_df.rename(
-                columns={col_prod_req: "PRODUCTO", col_cant_pend: "PENDIENTE"}
-            )
 
+            # Renombramos para mostrar bonito
+            rename_map = {col_prod_req: "PRODUCTO", col_cant_pend: "PENDIENTE"}
+            pend_df = pend_df.rename(columns=rename_map)
+
+            # A número y nos quedamos solo con PENDIENTE > 0 (por seguridad)
             pend_df["PENDIENTE"] = pd.to_numeric(
                 pend_df["PENDIENTE"], errors="coerce"
             ).fillna(0.0)
             pend_df = pend_df[pend_df["PENDIENTE"] > 0]
+
+            # Ordenamos de mayor a menor pendiente
             pend_df = pend_df.sort_values("PENDIENTE", ascending=False)
 
+            # Columnas a mostrar
             if "SKU" in pend_df.columns:
                 cols_mostrar = ["SKU", "PRODUCTO", "PENDIENTE"]
             else:
@@ -1916,7 +1929,9 @@ if st.button("Calcular pendientes", key="btn_calc_pendientes"):
                 hide_index=True,
             )
 
+            # Total pendiente
             total_pend = pend_df["PENDIENTE"].sum()
+
             st.info(
                 f"**Resumen del requerimiento**  \n"
                 f"- Cantidad pendiente total: **{total_pend:.2f}**"
