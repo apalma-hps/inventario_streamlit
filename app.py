@@ -6,6 +6,43 @@ import pytz
 import os
 import requests
 import altair as alt
+import unicodedata
+
+def _normalize_text(s: str) -> str:
+    """
+    Normaliza texto para comparaciones robustas:
+    - Convierte a string
+    - Quita espacios al inicio y final
+    - Pasa a minúsculas
+    - Elimina acentos
+    - Quita caracteres que no sean letras o números
+    """
+    if s is None or (isinstance(s, float) and pd.isna(s)):
+        return ""
+    s = str(s).strip().lower()
+
+    # Quitar acentos
+    s = unicodedata.normalize("NFD", s)
+    s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
+
+    # Quitar espacios y signos de puntuación, dejar solo letras y números
+    s = "".join(ch for ch in s if ch.isalnum())
+    return s
+
+
+def norm(s: str) -> str:
+    """Alias de _normalize_text para nombres de columnas, etc."""
+    return _normalize_text(s)
+
+
+def norm_producto(s: str) -> str:
+    """
+    Normalizador específico para nombres de producto.
+    Si quisieras permitir más cosas (como guiones, etc.) lo puedes ajustar,
+    pero para efectos de clave funciona igual.
+    """
+    return _normalize_text(s)
+
 
 
 def hp_altair_theme():
@@ -359,15 +396,16 @@ REQUERIMIENTOS_COLUMNS = [
     "CANTIDAD",
     "COSTO TOTAL",
     "FECHA DESEADA",
-    "FACTURA",
     "OBSERVACIONES",
     "ESTATUS",
     "ID_REQ",
-    "FECHA DE REQUSICIÓN",
     "Hora",
     "CECO_DESTINO",
     "CATEGORIA",
+    "Fecha aproximada de entrega",
+    "SKU",
 ]
+
 
 # --------------------------------------------------
 # Columnas en la hoja de Recepción
@@ -389,8 +427,9 @@ RECEPCION_COLUMNS = [
     "APROBÓ",
     "ID DE REQUERIMIENTO AL QUE CORRESPONDE",
     "Folio Generado de Recepcion",
-    "fecha de caducidad",
+    "fecha de caducidad",   # 👈 NUEVA COLUMNA
 ]
+
 
 # --------------------------------------------------
 # Inicializar session_state
@@ -414,6 +453,7 @@ if "req_recepcion_df" not in st.session_state:
 if "req_recepcion_id" not in st.session_state:
     st.session_state["req_recepcion_id"] = ""
 
+# DataFrame editable de recepción
 if "tabla_recepcion_df" not in st.session_state:
     st.session_state["tabla_recepcion_df"] = None
 
@@ -572,65 +612,90 @@ def enviar_a_consolidado(df: pd.DataFrame):
 # --------------------------------------------------
 @st.cache_data
 def load_catalogo_productos() -> pd.DataFrame:
-    df = pd.read_excel(
-        PLANTILLA_INVENTARIO_XLSX_URL,
-        sheet_name="Catalogo_Productos"
-    )
+    """
+    Carga el catálogo desde CATALOGO_CSV_URL (misma hoja donde está Requerimientos),
+    asumiendo columnas:
+    - Nombre
+    - UdM de Compra
+    - Coste
+    - PU
+    - Categoría de producto
+    - Referencia interna
+    - Clave SAT
+    - Proveedor
+    y las normaliza a:
+    - Producto
+    - Categoria
+    - Referencia Interna
+    - UdM de Compra
+    - Proveedor
+    + PRODUCTO_KEY
+    """
+    url = st.secrets.get("CATALOGO_CSV_URL", "")
+    if not url:
+        raise ValueError(
+            "No se encontró CATALOGO_CSV_URL en secrets. "
+            "Debes apuntar al CSV de la hoja 'Catálogo'."
+        )
+
+    try:
+        df = pd.read_csv(url)
+    except pd.errors.ParserError:
+        df = pd.read_csv(url, engine="python", on_bad_lines="skip")
 
     df.columns = df.columns.astype(str).str.strip()
 
-    if "Producto" not in df.columns:
-        raise ValueError("La hoja Catalogo_Productos no contiene la columna 'Producto'.")
+    rename_map = {}
+    for col in df.columns:
+        n = norm(col)
+        if n == "nombre":
+            rename_map[col] = "Producto"
+        elif n in ("categoriadeproducto", "categoríadeproducto"):
+            rename_map[col] = "Categoria"
+        elif n in ("referenciainterna", "sku"):
+            rename_map[col] = "Referencia Interna"
+        elif n in ("udmdecompra", "unidaddecompra", "udmcompra"):
+            rename_map[col] = "UdM de Compra"
+        elif n in ("proveedor", "provedor"):
+            rename_map[col] = "Proveedor"
 
-    cols = []
+    df = df.rename(columns=rename_map)
 
-    if "Categoria" in df.columns:
-        cols.append("Categoria")
+    required = ["Producto", "Categoria", "Referencia Interna"]
+    for c in required:
+        if c not in df.columns:
+            raise ValueError(
+                "La hoja 'Catálogo' debe contener al menos "
+                "'Nombre', 'Categoría de producto' y 'Referencia interna'. "
+                f"Columnas leídas: {list(df.columns)}"
+            )
 
-    cols.append("Producto")
-
-    if "Referencia Interna" in df.columns:
-        cols.append("Referencia Interna")
-
-    df = df[cols].copy()
-
-    df = df[df["Producto"].notna()]
+    df = df[df["Producto"].notna()].copy()
     df["Producto"] = df["Producto"].astype(str).str.strip()
+    df["Categoria"] = df["Categoria"].astype(str).str.strip()
+    df["Referencia Interna"] = df["Referencia Interna"].astype(str).str.strip()
 
-    if "Categoria" in df.columns:
-        df["Categoria"] = df["Categoria"].astype(str).str.strip()
-    else:
-        df["Categoria"] = "Sin categoría"
-
-    if "Referencia Interna" in df.columns:
-        df["Referencia Interna"] = df["Referencia Interna"].astype(str).str.strip()
+    df["UdM de Compra"] = (
+        df.get("UdM de Compra", "pz")
+        .astype(str)
+        .fillna("pz")
+        .str.strip()
+    )
+    df["Proveedor"] = (
+        df.get("Proveedor", "")
+        .astype(str)
+        .fillna("")
+        .str.strip()
+    )
 
     df = df[
         (df["Producto"] != "") &
         (df["Producto"].str.lower() != "nan")
     ].reset_index(drop=True)
 
-    df["PRODUCTO_KEY"] = df["Producto"].apply(lambda s: norm_producto(s))
+    df["PRODUCTO_KEY"] = df["Producto"].apply(norm_producto)
 
     return df
-
-
-def norm(s: str) -> str:
-    return (
-        str(s)
-        .strip()
-        .lower()
-        .replace(" ", "")
-        .replace("_", "")
-    )
-
-
-def norm_producto(s: str) -> str:
-    if pd.isna(s):
-        return ""
-    s = str(s).strip().lower()
-    s = " ".join(s.split())
-    return s
 
 
 @st.cache_data
@@ -644,6 +709,7 @@ def load_requerimientos_from_gsheet() -> pd.DataFrame:
     except pd.errors.ParserError:
         df = pd.read_csv(url, engine="python", on_bad_lines="skip")
 
+    # Normalizamos nombres que pueden venir medio distintos
     rename_map = {}
     for col in df.columns:
         n = norm(col)
@@ -709,6 +775,7 @@ def enviar_requerimientos_a_gsheet(lista_req_data):
         )
         return
 
+    # Construir las filas con el orden de REQUERIMIENTOS_COLUMNS
     rows = []
     for req_data in lista_req_data:
         row = [req_data.get(col, "") for col in REQUERIMIENTOS_COLUMNS]
@@ -718,72 +785,106 @@ def enviar_requerimientos_a_gsheet(lista_req_data):
 
     try:
         resp = requests.post(url, json=payload, timeout=10)
-        if resp.status_code == 200:
-            try:
-                data = resp.json()
-            except Exception:
-                data = {}
-            if data.get("status") == "ok":
-                st.success(
-                    f"Requerimiento enviado y registrado. "
-                    f"Filas insertadas: {data.get('inserted', 'desconocido')}."
-                )
-            else:
-                st.warning(
-                    "Se recibió respuesta de Apps Script pero con estado distinto de 'ok'. "
-                    f"Respuesta: {data}"
-                )
-        else:
+
+        # --- DEBUG: mostrar SIEMPRE el cuerpo bruto que devuelve Apps Script ---
+        st.markdown("#### Respuesta cruda de Apps Script (debug)")
+        st.code(resp.text, language="json")
+
+        # Si el código HTTP no es 200, paramos aquí
+        if resp.status_code != 200:
             st.error(
                 f"No se pudo enviar el requerimiento. Código HTTP: {resp.status_code}"
             )
+            return
+
+        # Intentar parsear JSON, pero sin tronar la app si falla
+        try:
+            data = resp.json()
+        except Exception as e:
+            st.warning(
+                "La respuesta de Apps Script no es un JSON válido. "
+                "Revisa el contenido mostrado arriba (debug)."
+            )
+            st.exception(e)
+            return
+
+        # Si vino JSON, revisar el campo status
+        status = data.get("status")
+        if status == "ok":
+            st.success(
+                f"Requerimiento enviado y registrado. "
+                f"Filas insertadas: {data.get('inserted', 'desconocido')}."
+            )
+        else:
+            st.warning(
+                "Se recibió respuesta de Apps Script pero con estado distinto de 'ok'. "
+                f"Respuesta completa: {data}"
+            )
+
     except Exception as e:
         st.error("Error al enviar el requerimiento.")
         st.exception(e)
 
 
+
 def enviar_recepcion_a_gsheet(lista_recepcion_data):
+    """
+    Envía a Apps Script una lista de dicts, cada uno con:
+    - ID_REQ
+    - INSUMO
+    - SKU
+    - campos de recepción (Fecha de recepción app, FACTURA / TICKET, etc.)
+    Apps Script se encarga de localizar la fila en la hoja "Requerimientos"
+    y actualizar las columnas de recepción.
+    """
     url = st.secrets.get("APPS_SCRIPT_RECEPCION_URL", "")
 
     if not url:
         st.warning(
             "No se configuró APPS_SCRIPT_RECEPCION_URL en secrets. "
-            "La recepción NO se enviará a la hoja 'Recepción'."
+            "La recepción NO se actualizará en la hoja 'Requerimientos'."
         )
         return
 
-    rows = []
-    for rec_data in lista_recepcion_data:
-        row = [rec_data.get(col, "") for col in RECEPCION_COLUMNS]
-        rows.append(row)
-
-    payload = {"rows": rows}
+    # 👉 mandamos directamente la lista de objetos
+    payload = {"rows": lista_recepcion_data}
 
     try:
         resp = requests.post(url, json=payload, timeout=10)
-        if resp.status_code == 200:
-            try:
-                data = resp.json()
-            except Exception:
-                data = {}
-            if data.get("status") == "ok":
-                st.success(
-                    f"Recepción registrada correctamente. "
-                    f"Filas insertadas: {data.get('inserted', 'desconocido')}."
-                )
-            else:
-                st.warning(
-                    "Apps Script respondió pero con estado distinto de 'ok'. "
-                    f"Respuesta: {data}"
-                )
-        else:
+
+        st.markdown("#### Respuesta cruda de Apps Script (recepción – debug)")
+        st.code(resp.text, language="json")
+
+        if resp.status_code != 200:
             st.error(
                 f"No se pudo registrar la recepción. Código HTTP: {resp.status_code}"
             )
+            return
+
+        try:
+            data = resp.json()
+        except Exception as e:
+            st.warning(
+                "La respuesta de Apps Script (recepción) no es un JSON válido. "
+                "Revisa el contenido mostrado arriba."
+            )
+            st.exception(e)
+            return
+
+        if data.get("status") == "ok":
+            st.success(
+                f"Recepción registrada correctamente. "
+                f"Filas actualizadas: {data.get('updated', 'desconocido')}."
+            )
+        else:
+            st.warning(
+                "Apps Script de recepción respondió con status distinto de 'ok'. "
+                f"Respuesta: {data}"
+            )
+
     except Exception as e:
         st.error("Error al enviar la recepción a Google Sheets.")
         st.exception(e)
-
 
 def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
     url = st.secrets.get("APPS_SCRIPT_CATALOGO_URL", "")
@@ -805,40 +906,42 @@ def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
 
     try:
         resp = requests.post(url, json=payload, timeout=10)
-        if resp.status_code == 200:
-            st.success("Nuevo producto enviado para agregarlo al catálogo.")
-        else:
+
+        st.markdown("#### Respuesta cruda de Apps Script (catálogo – debug)")
+        st.code(resp.text, language="json")
+
+        if resp.status_code != 200:
             st.error(
                 f"No se pudo enviar el nuevo producto. Código HTTP: {resp.status_code}"
             )
+            return
+
+        # Intentamos parsear JSON, pero sin tronar la app
+        try:
+            data = resp.json()
+        except Exception as e:
+            st.warning(
+                "La respuesta de Apps Script (catálogo) no es un JSON válido. "
+                "Revisa el contenido mostrado arriba."
+            )
+            st.exception(e)
+            return
+
+        status = data.get("status")
+        if status == "ok":
+            if data.get("exists"):
+                st.info(f"El producto '{nombre}' ya existe en el catálogo.")
+            else:
+                st.success(f"Producto '{nombre}' enviado y agregado al catálogo.")
+        else:
+            st.warning(
+                "Apps Script de catálogo respondió con status distinto de 'ok'. "
+                f"Respuesta: {data}"
+            )
+
     except Exception as e:
         st.error("Error al enviar el nuevo producto al catálogo.")
         st.exception(e)
-
-
-# 🔹 Función auxiliar para leer números de forma segura desde las filas del data_editor
-def safe_float_from_row(row, col_name, default=0.0):
-    """
-    Convierte a float un valor de la fila `row[col_name]` manejando None, strings vacíos, etc.
-    Devuelve `default` si no se puede convertir.
-    """
-    try:
-        valor = row[col_name]
-    except KeyError:
-        return default
-
-    if valor is None:
-        return default
-
-    if isinstance(valor, str):
-        valor = valor.strip().replace(",", "")
-        if valor == "":
-            return default
-
-    try:
-        return float(valor)
-    except (TypeError, ValueError):
-        return default
 
 
 # --------------------------------------------------
@@ -1002,22 +1105,35 @@ elif vista == "📨 Requerimientos de producto":
             for e in errores:
                 st.write("-", e)
         else:
+            categoria_item = "Sin categoría"
+            sku_item = ""
+            unidad_medida_item = "pz"
+            proveedor_item = ""
+
             if es_nuevo:
                 if categoria_sel != OPCION_TODAS:
                     categoria_item = categoria_sel
                 else:
                     categoria_item = "Sin categoría"
+
                 if producto_final:
-                    enviar_nuevo_producto_a_catalogo(producto_final, categoria_item)
+                    enviar_nuevo_producto_a_catalogo(
+                        producto_final,
+                        categoria_item
+                    )
             else:
                 mask = (
-                    productos_df["Producto"]
-                    .astype(str)
-                    .str.strip()
-                    == str(producto_final).strip()
+                        productos_df["Producto"]
+                        .astype(str)
+                        .str.strip()
+                        == str(producto_final).strip()
                 )
                 if mask.any():
-                    categoria_item = productos_df.loc[mask, "Categoria"].iloc[0]
+                    row_prod = productos_df.loc[mask].iloc[0]
+                    categoria_item = row_prod.get("Categoria", "Sin categoría")
+                    sku_item = row_prod.get("Referencia Interna", "")
+                    unidad_medida_item = row_prod.get("UdM de Compra", "pz")
+                    proveedor_item = row_prod.get("Proveedor", "")
                 else:
                     categoria_item = (
                         categoria_sel
@@ -1027,15 +1143,17 @@ elif vista == "📨 Requerimientos de producto":
 
             item = {
                 "INSUMO": producto_final,
-                "UNIDAD DE MEDIDA": "pz",
+                "UNIDAD DE MEDIDA": unidad_medida_item,
                 "CANTIDAD": cantidad,
                 "Observaciones": observaciones,
                 "Categoria": categoria_item,
+                "SKU": sku_item,
+                "PROVEDOR": proveedor_item,
             }
             st.session_state["carrito_req"].append(item)
             st.success(
                 f"Producto agregado al requerimiento: {producto_final} "
-                f"(Cantidad: {cantidad}, Categoría: {categoria_item})"
+                f"(Cantidad: {cantidad}, Categoría: {categoria_item}, SKU: {sku_item or 'N/A'})"
             )
 
     if st.session_state["carrito_req"]:
@@ -1108,7 +1226,20 @@ elif vista == "📨 Requerimientos de producto":
         if send_req:
             errores = []
 
-            # Validación lead time ≥ 4 días (excepto Flautas Lamartine)
+            # -------- Validación: FECHA REQUERIDA no puede ser sábado ni domingo --------
+            # (aplica para todos los CECOs)
+            weekday_req = fecha_requerida.weekday()  # lunes=0 ... domingo=6
+            if weekday_req >= 5:
+                st.warning(
+                    "🚫 La *Fecha requerida (fecha de entrega)* no puede ser sábado ni domingo. "
+                    "Selecciona un día hábil (lunes a viernes)."
+                )
+                errores.append(
+                    "La *Fecha requerida (fecha de entrega)* debe ser un día hábil (lunes a viernes)."
+                )
+
+            # 🔎 Validación de lead time mínimo de 4 días
+            # ❗ NO aplica para Flautas Lamartine
             tz = pytz.timezone("America/Mexico_City")
             hoy = datetime.now(tz).date()
             diferencia_dias = (fecha_requerida - hoy).days
@@ -1123,6 +1254,7 @@ elif vista == "📨 Requerimientos de producto":
                         "La *Fecha requerida* debe ser al menos 4 días después de la fecha actual."
                     )
 
+            # 🔎 Validaciones existentes
             if not ceco_destino:
                 errores.append("Debes seleccionar el *CECO destino*.")
             if not st.session_state["carrito_req"]:
@@ -1137,26 +1269,25 @@ elif vista == "📨 Requerimientos de producto":
                 st.info(f"Folio de requerimiento generado: **{folio_req}**")
 
                 lista_req_data = []
-                proveedor = ""
 
                 for item in st.session_state["carrito_req"]:
                     req_data = {
                         "FECHA DE PEDIDO": fecha_creacion,
-                        "PROVEDOR": proveedor,
+                        "PROVEDOR": item.get("PROVEDOR", ""),
                         "INSUMO": item["INSUMO"],
                         "UNIDAD DE MEDIDA": item["UNIDAD DE MEDIDA"],
                         "COSTO UNIDAD": "",
                         "CANTIDAD": item["CANTIDAD"],
                         "COSTO TOTAL": "",
                         "FECHA DESEADA": fecha_requerida.isoformat(),
-                        "FACTURA": "",
                         "OBSERVACIONES": item["Observaciones"],
                         "ESTATUS": "Pendiente",
                         "ID_REQ": folio_req,
-                        "FECHA DE REQUSICIÓN": fecha_creacion,
                         "Hora": hora_creacion,
                         "CECO_DESTINO": ceco_destino,
                         "CATEGORIA": item.get("Categoria", "Sin categoría"),
+                        "Fecha aproximada de entrega": fecha_requerida.isoformat(),
+                        "SKU": item.get("SKU", ""),
                     }
 
                     lista_req_data.append(req_data)
@@ -1283,6 +1414,7 @@ elif vista == "📥 Recepción":
         "4) Registra todo en la hoja **'Recepción'** con un solo botón."
     )
 
+    # (catálogo, por si lo necesitas después, lo dejamos igual)
     try:
         catalogo_df = load_catalogo_productos()
     except Exception as e:
@@ -1290,6 +1422,7 @@ elif vista == "📥 Recepción":
         st.exception(e)
         catalogo_df = pd.DataFrame()
 
+    # ---------- 1) Buscar requerimiento por folio ----------
     col_buscar1, col_buscar2 = st.columns([2, 1])
     id_req_input = col_buscar1.text_input(
         "Folio de requerimiento (ID_REQ)",
@@ -1338,6 +1471,7 @@ elif vista == "📥 Recepción":
     df_req_folio = st.session_state.get("req_recepcion_df", None)
     id_req_actual = st.session_state.get("req_recepcion_id", "")
 
+    # ---------- 2) Mostrar detalle del requerimiento ----------
     if df_req_folio is not None and not df_req_folio.empty:
         st.markdown("### 🧾 Productos del requerimiento")
 
@@ -1360,21 +1494,41 @@ elif vista == "📥 Recepción":
             hide_index=True,
         )
 
+        # ---------- 3) Tabla editable: recepción por insumo ----------
         st.markdown("### 📦 Registro de recepción por insumo")
 
+        # Construimos SIEMPRE la base, pero el data_editor mantiene el estado con su key
         if "INSUMO" not in df_req_folio.columns or "CANTIDAD" not in df_req_folio.columns:
             st.error(
                 "La hoja de requerimientos debe tener columnas 'INSUMO' y 'CANTIDAD' "
                 "para construir la tabla de recepción."
             )
         else:
-            base_df = (
-                df_req_folio.groupby("INSUMO", as_index=False)["CANTIDAD"]
-                .sum()
-                .rename(columns={"INSUMO": "INSUMO", "CANTIDAD": "CANTIDAD PO"})
-            )
+            # 3.1 Base: INSUMO + (SKU si existe) + CANTIDAD PO
+            if "SKU" in df_req_folio.columns:
+                tmp = df_req_folio.dropna(subset=["INSUMO"]).copy()
+                # Si SKU viene vacío/NaN en requerimientos viejos, lo tratamos como ""
+                tmp["SKU"] = tmp["SKU"].fillna("").astype(str).str.strip()
 
+                base_df = (
+                    tmp.groupby(["INSUMO", "SKU"], as_index=False)["CANTIDAD"]
+                    .sum()
+                    .rename(columns={"CANTIDAD": "CANTIDAD PO"})
+                )
+            else:
+                tmp = df_req_folio.dropna(subset=["INSUMO"]).copy()
+                base_df = (
+                    tmp.groupby("INSUMO", as_index=False)["CANTIDAD"]
+                    .sum()
+                    .rename(columns={"CANTIDAD": "CANTIDAD PO"})
+                )
+                # Aseguramos que exista columna SKU para el data_editor
+                base_df["SKU"] = ""
+
+            # 🔽 A PARTIR DE AQUÍ DEJA TAL CUAL LO QUE YA TENÍAS 🔽
+            # PROVEEDOR POR INSUMO, tomando lo que venga en Requerimientos
             if "PROVEDOR" in df_req_folio.columns:
+                # Tabla (INSUMO, PROVEDOR) limpia y sin duplicados
                 prov_por_insumo = (
                     df_req_folio[["INSUMO", "PROVEDOR"]]
                     .dropna(subset=["INSUMO"])
@@ -1382,13 +1536,22 @@ elif vista == "📥 Recepción":
                 )
                 prov_por_insumo["INSUMO"] = prov_por_insumo["INSUMO"].astype(str).str.strip()
                 prov_por_insumo["PROVEDOR"] = prov_por_insumo["PROVEDOR"].astype(str).str.strip()
+
+                # Si un insumo aparece varias veces, nos quedamos con el primer proveedor
                 prov_por_insumo = prov_por_insumo.drop_duplicates(subset=["INSUMO"])
+
+                # Normalizamos también el INSUMO en base_df para que el merge sea robusto
                 base_df["INSUMO"] = base_df["INSUMO"].astype(str).str.strip()
+
+                # Hacemos el merge por INSUMO
                 base_df = base_df.merge(prov_por_insumo, on="INSUMO", how="left")
+
+                # Renombramos PROVEDOR → PROVEEDOR para la tabla de recepción
                 base_df.rename(columns={"PROVEDOR": "PROVEEDOR"}, inplace=True)
             else:
                 base_df["PROVEEDOR"] = ""
 
+            # Campos a llenar por fila
             base_df["Fecha de recepción"] = date.today()
             base_df["FACTURA / TICKET"] = ""
             base_df["RECIBIÓ"] = ""
@@ -1396,13 +1559,18 @@ elif vista == "📥 Recepción":
             base_df["TEMP (°C)"] = None
             base_df["CALIDAD (OK / RECHAZO)"] = "OK"
             base_df["OBSERVACIONES"] = ""
-            base_df["fecha de caducidad"] = None
+            base_df["fecha de caducidad"] = None  # 👈 NUEVA COLUMNA
 
+            # 👇 Este widget mantiene su propio estado, no usamos session_state para el DF
             edited_df = st.data_editor(
                 base_df,
                 column_config={
                     "INSUMO": st.column_config.TextColumn(
                         "Producto",
+                        disabled=True,
+                    ),
+                    "SKU": st.column_config.TextColumn(
+                        "SKU",
                         disabled=True,
                     ),
                     "CANTIDAD PO": st.column_config.NumberColumn(
@@ -1456,12 +1624,7 @@ elif vista == "📥 Recepción":
                 key=f"editor_recepcion_{id_req_actual or 'sin_folio'}",
             )
 
-            st.markdown(
-                "> **Producto / Cantidad PO / PROVEEDOR** vienen del requerimiento y están bloqueados.  \n"
-                "> Los campos **Fecha de recepción, FACTURA / TICKET, RECIBIÓ, CANTIDAD RECIBIDA, TEMP, CALIDAD y OBSERVACIONES** "
-                "se llenan por cada fila."
-            )
-
+            # ---------- 4) Botón para registrar recepción ----------
             col_btn1, col_btn2 = st.columns(2)
             btn_enviar_recep = col_btn2.button("✅ Confirmar y registrar recepción")
 
@@ -1479,9 +1642,10 @@ elif vista == "📥 Recepción":
                         "La tabla de recepción está vacía. Verifica el requerimiento."
                     )
 
+                # Validación por fila
                 if edited_df is not None:
                     for _, row in edited_df.iterrows():
-                        cant_rec = safe_float_from_row(row, "CANTIDAD RECIBIDA", 0.0)
+                        cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
                         calidad = str(row.get("CALIDAD (OK / RECHAZO)", "OK") or "OK")
                         obs = str(row.get("OBSERVACIONES", "") or "").strip()
 
@@ -1505,19 +1669,21 @@ elif vista == "📥 Recepción":
 
                     lista_recepcion_data = []
                     for _, row in edited_df.iterrows():
-                        cant_po = safe_float_from_row(row, "CANTIDAD PO", 0.0)
-                        cant_rec = safe_float_from_row(row, "CANTIDAD RECIBIDA", 0.0)
+                        cant_po = float(row.get("CANTIDAD PO", 0) or 0)
+                        cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
                         obs = str(row.get("OBSERVACIONES", "") or "")
 
                         if cant_po == 0 and cant_rec == 0 and obs.strip() == "":
                             continue
 
+                        # Fecha de recepción
                         fecha_linea = row.get("Fecha de recepción", date.today())
                         if hasattr(fecha_linea, "isoformat"):
                             fecha_str = fecha_linea.isoformat()
                         else:
                             fecha_str = str(fecha_linea)
 
+                        # Fecha de caducidad
                         fecha_cad = row.get("fecha de caducidad", None)
                         if fecha_cad and hasattr(fecha_cad, "isoformat"):
                             fecha_cad_str = fecha_cad.isoformat()
@@ -1527,24 +1693,25 @@ elif vista == "📥 Recepción":
                             fecha_cad_str = ""
 
                         rec_data = {
-                            "Fecha de recepción": fecha_str,
-                            "PROVEEDOR": row.get("PROVEEDOR", ""),
+                            # 🔑 claves para localizar la fila en "Requerimientos"
+                            "ID_REQ": id_req_actual,
+                            "INSUMO": row.get("INSUMO", ""),
+                            "SKU": row.get("SKU", ""),
+
+                            # 🌐 columnas de recepción en la misma hoja "Requerimientos"
+                            "Estatus Recepción": "",  # lo calcularemos en Apps Script (Completado / Parcial)
+                            "Fecha de recepción app": fecha_str,
                             "FACTURA / TICKET": row.get("FACTURA / TICKET", ""),
-                            "SKU": "",
-                            "PRODUCTO": row.get("INSUMO", ""),
-                            "UNIDAD DE MEDIDA": "pz",
-                            "CANTIDAD PO": cant_po,
                             "CANTIDAD RECIBIDA": cant_rec,
-                            "TEMP (°C)": safe_float_from_row(row, "TEMP (°C)", 0.0),
+                            "TEMP (°C)": float(row.get("TEMP (°C)", 0) or 0),
                             "CALIDAD (OK / RECHAZO)": row.get("CALIDAD (OK / RECHAZO)", "OK"),
-                            "OBSERVACIONES": obs,
+                            "OBSERVACIONES RECEPCIÓN": obs,
                             "RECIBIÓ": row.get("RECIBIÓ", ""),
-                            "FOLIO": "",
-                            "APROBÓ": "",
-                            "ID DE REQUERIMIENTO AL QUE CORRESPONDE": id_req_actual,
+                            "APROBÓ": "",  # lo pueden llenar después en la hoja
                             "Folio Generado de Recepcion": folio_recep,
                             "fecha de caducidad": fecha_cad_str,
                         }
+
                         lista_recepcion_data.append(rec_data)
 
                     if not lista_recepcion_data:
@@ -1561,6 +1728,7 @@ elif vista == "📥 Recepción":
             "Busca primero un folio de requerimiento (ID_REQ) para poder registrar la recepción."
         )
 
+    # ---------- 5) Consulta de pendientes por requerimiento ----------
     st.markdown("---")
     st.markdown("### 🔍 Consulta de pendientes por requerimiento")
 
@@ -1576,8 +1744,10 @@ elif vista == "📥 Recepción":
         else:
             try:
                 req_df = load_requerimientos_from_gsheet()
-                recep_df = load_recepcion_from_gsheet()
-                catalogo_df = load_catalogo_productos()
+                req_df.columns = req_df.columns.astype(str).str.strip()
+
+               # st.markdown("#### Columnas leídas de Requerimientos (debug)")
+                #st.write(list(req_df.columns))
 
                 if "ID_REQ" not in req_df.columns:
                     st.error(
@@ -1586,6 +1756,7 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
+                # Filtrar por folio
                 req_folio = req_df[
                     req_df["ID_REQ"].astype(str).str.strip() == id_req_pend.strip()
                 ].copy()
@@ -1596,6 +1767,7 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
+                # Columna de producto
                 if "INSUMO" in req_folio.columns:
                     col_prod_req = "INSUMO"
                 elif "PRODUCTO" in req_folio.columns:
@@ -1607,114 +1779,84 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                if "CANTIDAD" not in req_folio.columns:
-                    st.error("La hoja de Requerimientos no tiene la columna 'CANTIDAD'.")
-                    st.stop()
-
-                req_agrup = (
-                    req_folio.groupby(col_prod_req, as_index=False)["CANTIDAD"]
-                    .sum()
-                    .rename(columns={
-                        col_prod_req: "PRODUCTO",
-                        "CANTIDAD": "CANTIDAD_PO"
-                    })
-                )
-
-                col_id_req_recep = None
-                for c in recep_df.columns:
-                    if norm(c) in (
-                        "idderequerimientoalquecorresponde",
-                        "idrequerimientoalquecorresponde",
-                        "id_de_requerimiento_al_que_corresponde"
-                    ):
-                        col_id_req_recep = c
+                # Localizar columna 'CANTIDAD PENDIENTE'
+                col_cant_pend = None
+                for c in req_folio.columns:
+                    if norm(c) == "cantidadpendiente":
+                        col_cant_pend = c
                         break
 
-                if col_id_req_recep is None:
-                    if "ID DE REQUERIMIENTO AL QUE CORRESPONDE" in recep_df.columns:
-                        col_id_req_recep = "ID DE REQUERIMIENTO AL QUE CORRESPONDE"
-
-                if col_id_req_recep is None:
+                if col_cant_pend is None:
                     st.error(
-                        "No se encontró la columna 'ID DE REQUERIMIENTO AL QUE CORRESPONDE' "
-                        "en la hoja de Recepción."
+                        "No se encontró la columna de 'CANTIDAD PENDIENTE' "
+                        "en la hoja de Requerimientos. "
+                        f"Columnas leídas: {list(req_folio.columns)}"
                     )
                     st.stop()
 
-                recep_folio = recep_df[
-                    recep_df[col_id_req_recep].astype(str).str.strip() == id_req_pend.strip()
-                ].copy()
-
-                if recep_folio.empty:
-                    recep_agrup = pd.DataFrame(columns=["PRODUCTO", "CANTIDAD_RECIBIDA"])
-                else:
-                    if "PRODUCTO" in recep_folio.columns:
-                        col_prod_recep = "PRODUCTO"
-                    elif "INSUMO" in recep_folio.columns:
-                        col_prod_recep = "INSUMO"
-                    else:
-                        st.error(
-                            "No se encontró una columna de producto ('PRODUCTO' o 'INSUMO') "
-                            "en la hoja de Recepción."
-                        )
-                        st.stop()
-
-                    if "CANTIDAD RECIBIDA" not in recep_folio.columns:
-                        st.error(
-                            "La hoja de Recepción no tiene la columna 'CANTIDAD RECIBIDA'."
-                        )
-                        st.stop()
-
-                    recep_agrup = (
-                        recep_folio.groupby(col_prod_recep, as_index=False)["CANTIDAD RECIBIDA"]
-                        .sum()
-                        .rename(columns={
-                            col_prod_recep: "PRODUCTO",
-                            "CANTIDAD RECIBIDA": "CANTIDAD_RECIBIDA"
-                        })
-                    )
-
-                pend_df = req_agrup.merge(
-                    recep_agrup,
-                    on="PRODUCTO",
-                    how="left"
+                st.markdown(
+                    f"Usando columna de pendiente: **{col_cant_pend}** (normalizada)"
                 )
 
-                pend_df["CANTIDAD_PO"] = pd.to_numeric(
-                    pend_df["CANTIDAD_PO"], errors="coerce"
+                # A número
+                req_folio[col_cant_pend] = pd.to_numeric(
+                    req_folio[col_cant_pend], errors="coerce"
                 ).fillna(0.0)
 
-                pend_df["CANTIDAD_RECIBIDA"] = pd.to_numeric(
-                    pend_df["CANTIDAD_RECIBIDA"], errors="coerce"
+                # Solo filas con pendiente > 0
+                req_pend = req_folio[req_folio[col_cant_pend] > 0].copy()
+
+                if req_pend.empty:
+                    st.info(
+                        f"El requerimiento `{id_req_pend}` no tiene productos pendientes. 🎉"
+                    )
+                    st.stop()
+
+                # ---- Versión simple: mostramos exactamente las filas con pendiente > 0 ----
+                # Tomamos solo las columnas relevantes
+                cols_base = [col_prod_req, col_cant_pend]
+                if "SKU" in req_pend.columns:
+                    cols_base.insert(1, "SKU")  # PRODUCTO, SKU, CANTIDAD PENDIENTE
+
+                pend_df = req_pend[cols_base].copy()
+
+                # Renombramos para mostrar bonito
+                rename_map = {col_prod_req: "PRODUCTO", col_cant_pend: "PENDIENTE"}
+                pend_df = pend_df.rename(columns=rename_map)
+
+                # A número y nos quedamos solo con PENDIENTE > 0 (por seguridad)
+                pend_df["PENDIENTE"] = pd.to_numeric(
+                    pend_df["PENDIENTE"], errors="coerce"
                 ).fillna(0.0)
+                pend_df = pend_df[pend_df["PENDIENTE"] > 0]
 
-                pend_df["PENDIENTE"] = pend_df["CANTIDAD_PO"] - pend_df["CANTIDAD_RECIBIDA"]
-
-                pend_df["SKU"] = ""
-
-                cols_mostrar = ["SKU", "PRODUCTO", "CANTIDAD_PO", "CANTIDAD_RECIBIDA", "PENDIENTE"]
-                cols_mostrar = [c for c in cols_mostrar if c in pend_df.columns]
-
+                # Ordenamos de mayor a menor pendiente
                 pend_df = pend_df.sort_values("PENDIENTE", ascending=False)
 
-                st.markdown(f"#### Resultado de pendientes para ID_REQ: `{id_req_pend}`")
+                # Columnas a mostrar
+                if "SKU" in pend_df.columns:
+                    cols_mostrar = ["SKU", "PRODUCTO", "PENDIENTE"]
+                else:
+                    cols_mostrar = ["PRODUCTO", "PENDIENTE"]
+
+                st.markdown(
+                    f"#### Resultado de pendientes para ID_REQ: `{id_req_pend}`"
+                )
                 st.dataframe(
                     pend_df[cols_mostrar].reset_index(drop=True),
                     use_container_width=True,
                     hide_index=True,
                 )
 
-                total_po = pend_df["CANTIDAD_PO"].sum()
-                total_rec = pend_df["CANTIDAD_RECIBIDA"].sum()
+                # Total pendiente
                 total_pend = pend_df["PENDIENTE"].sum()
 
                 st.info(
-                    f"**Totales del requerimiento**  \n"
-                    f"- Cantidad solicitada (PO): **{total_po:.2f}**  \n"
-                    f"- Cantidad recibida: **{total_rec:.2f}**  \n"
-                    f"- Cantidad pendiente: **{total_pend:.2f}**"
+                    f"**Resumen del requerimiento**  \n"
+                    f"- Cantidad pendiente total: **{total_pend:.2f}**"
                 )
 
             except Exception as e:
                 st.error("Ocurrió un error al calcular los pendientes.")
                 st.exception(e)
+
