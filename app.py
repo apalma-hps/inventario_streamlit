@@ -8,6 +8,8 @@ import requests
 import altair as alt
 import unicodedata
 import random
+
+
 # --------------------------------------------------
 # Normalización de texto
 # --------------------------------------------------
@@ -446,6 +448,11 @@ if "req_recepcion_df" not in st.session_state:
 if "req_recepcion_id" not in st.session_state:
     st.session_state["req_recepcion_id"] = ""
 
+# ✅ FIX #3: Contador para forzar recreación del data_editor
+if "editor_version" not in st.session_state:
+    st.session_state["editor_version"] = 0
+
+
 # --------------------------------------------------
 # Funciones auxiliares – Inventario (por si las usas)
 # --------------------------------------------------
@@ -524,7 +531,7 @@ def validar_y_ordenar_columnas(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def generar_folio_inventario() -> (str, str, str):
+def generar_folio_inventario() -> tuple[str, str, str]:
     tz = pytz.timezone("America/Mexico_City")
     ahora = datetime.now(tz)
     folio = ahora.strftime("INV-%Y%m%d-%H%M%S")
@@ -540,9 +547,9 @@ def agregar_campos_sistema(df: pd.DataFrame, folio: str, fecha: str, hora: str) 
     df["Hora_Carga"] = hora
 
     ordered_cols = (
-        ["ID"] +
-        [c for c in USER_COLUMNS if c in df.columns] +
-        [c for c in ["Fecha_Carga", "Hora_Carga"] if c in df.columns]
+            ["ID"] +
+            [c for c in USER_COLUMNS if c in df.columns] +
+            [c for c in ["Fecha_Carga", "Hora_Carga"] if c in df.columns]
     )
     df = df[ordered_cols]
     return df
@@ -564,7 +571,8 @@ def enviar_a_consolidado(df: pd.DataFrame):
             return x.isoformat()
         return x
 
-    df_json = df_json.applymap(to_jsonable)
+    # ✅ FIX #4: Usar .map() en lugar de .applymap() (deprecado en pandas 2.1+)
+    df_json = df_json.map(to_jsonable)
     df_json = df_json.astype(object).where(pd.notnull(df_json), None)
 
     rows = df_json.values.tolist()
@@ -665,7 +673,7 @@ def load_catalogo_productos() -> pd.DataFrame:
     df = df[
         (df["Producto"] != "") &
         (df["Producto"].str.lower() != "nan")
-    ].reset_index(drop=True)
+        ].reset_index(drop=True)
 
     df["PRODUCTO_KEY"] = df["Producto"].apply(norm_producto)
 
@@ -702,7 +710,7 @@ def load_recepcion_from_gsheet() -> pd.DataFrame:
     return df
 
 
-def generar_folio_requerimiento() -> (str, str, str):
+def generar_folio_requerimiento() -> tuple[str, str, str]:
     tz = pytz.timezone("America/Mexico_City")
     ahora = datetime.now(tz)
     folio = ahora.strftime("REQ-%Y%m%d-%H%M%S")
@@ -711,7 +719,7 @@ def generar_folio_requerimiento() -> (str, str, str):
     return folio, fecha, hora
 
 
-def generar_folio_recepcion() -> (str, str, str):
+def generar_folio_recepcion() -> tuple[str, str, str]:
     tz = pytz.timezone("America/Mexico_City")
     ahora = datetime.now(tz)
     folio = ahora.strftime("REC-%Y%m%d-%H%M%S")
@@ -821,7 +829,7 @@ def enviar_recepcion_a_gsheet(lista_recepcion_data):
 
         status = data.get("status")
         if status == "ok":
-            # 👇 Solo mostramos 'Filas insertadas' si viene en el JSON
+            # Solo mostramos 'Filas insertadas' si viene en el JSON
             inserted = data.get("inserted", None)
             if inserted is not None:
                 st.success(
@@ -839,7 +847,6 @@ def enviar_recepcion_a_gsheet(lista_recepcion_data):
     except Exception as e:
         st.error("Error al enviar la recepción a Google Sheets.")
         st.exception(e)
-
 
 
 def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
@@ -905,7 +912,7 @@ def enviar_nuevo_producto_a_catalogo(nombre: str, categoria: str | None = None):
 vista = st.sidebar.radio(
     "Selecciona el proceso:",
     (
-        "📨 Requerimientos de producto",
+        "📦 Requerimientos de producto",
         "📥 Recepción",
         "❓ FAQs",
     ),
@@ -938,8 +945,8 @@ if vista == "❓ FAQs":
 # --------------------------------------------------
 # VISTA: Requerimientos de producto (con carrito)
 # --------------------------------------------------
-elif vista == "📨 Requerimientos de producto":
-    st.header("📨 Requerimientos de producto")
+elif vista == "📦 Requerimientos de producto":
+    st.header("📦 Requerimientos de producto")
 
     try:
         productos_df = load_catalogo_productos()
@@ -986,155 +993,77 @@ elif vista == "📨 Requerimientos de producto":
         )
 
         if categoria_sel == OPCION_TODAS:
-            df_filtrado_cat = productos_df.copy()
+            productos_filtrados = productos_df.copy()
         else:
-            df_filtrado_cat = productos_df[
+            productos_filtrados = productos_df[
                 productos_df["Categoria"] == categoria_sel
-            ].copy()
+                ].copy()
 
-        productos_unicos = sorted(
-            df_filtrado_cat["Producto"].dropna().astype(str).unique().tolist()
-        )
-
-        OPCION_OTRO = "Otro producto (no está en el catálogo)"
-        opciones_productos = (
-            ["--- Selecciona un producto ---"] + productos_unicos + [OPCION_OTRO]
-        )
+        lista_productos = productos_filtrados["Producto"].dropna().unique().tolist()
+        lista_productos = sorted(lista_productos)
 
         producto_sel = st.selectbox(
             "Producto",
-            opciones_productos,
-            key="producto_sel",
+            lista_productos,
+            key="producto_seleccionado",
         )
 
-        es_nuevo = False
-        producto_final = None
-
-        if producto_sel == OPCION_OTRO:
-            es_nuevo = True
-            st.info("Captura datos para agregar un nuevo producto al catálogo.")
-            st.warning(
-                "⚠️ Este producto **no está en el catálogo**. "
-                "Es obligatorio **justificar la compra** en el campo *Observaciones*."
-            )
-            producto_final = st.text_input("Nombre del nuevo producto")
+        # Obtener datos del producto seleccionado
+        fila_prod = productos_filtrados[productos_filtrados["Producto"] == producto_sel]
+        if not fila_prod.empty:
+            sku_prod = fila_prod.iloc[0].get("Referencia Interna", "")
+            udm_prod = fila_prod.iloc[0].get("UdM de Compra", "pz")
+            prov_prod = fila_prod.iloc[0].get("Proveedor", "")
+            cat_prod = fila_prod.iloc[0].get("Categoria", "Sin categoría")
         else:
-            es_nuevo = False
-            producto_final = (
-                None
-                if producto_sel == "--- Selecciona un producto ---"
-                else producto_sel
-            )
+            sku_prod = ""
+            udm_prod = "pz"
+            prov_prod = ""
+            cat_prod = "Sin categoría"
 
-        cantidad = st.number_input(
-            "Cantidad requerida para este producto",
+        col_cant, col_obs = st.columns(2)
+        cantidad_req = col_cant.number_input(
+            "Cantidad requerida",
             min_value=0.0,
             step=1.0,
+            value=1.0,
+            key="cantidad_req",
+        )
+        observaciones_req = col_obs.text_input(
+            "Observaciones (opcional)",
+            value="",
+            key="obs_req",
         )
 
-        observaciones = st.text_area("Observaciones (para este producto)")
-
-        colb1, _ = st.columns(2)
-        add_line = colb1.button(
-            "➕ Agregar producto al requerimiento", key="btn_add_line"
-        )
-        send_req = False
-
-    # ----- Agregar producto al carrito -----
-    if add_line:
-        errores = []
-
-        if producto_final is None or producto_final == "":
-            errores.append("Debes seleccionar un producto o capturar uno nuevo.")
-
-        if cantidad <= 0:
-            errores.append("La *Cantidad requerida* debe ser mayor a 0.")
-
-        if es_nuevo and (not observaciones or not observaciones.strip()):
-            errores.append(
-                "Para productos que **no están en el catálogo** es obligatorio "
-                "justificar la compra en el campo *Observaciones*."
-            )
-
-        if errores:
-            st.error("No se pudo agregar el producto al requerimiento:")
-            for e in errores:
-                st.write("-", e)
-        else:
-            categoria_item = "Sin categoría"
-            sku_item = ""
-            unidad_medida_item = "pz"
-            proveedor_item = ""
-
-            if es_nuevo:
-                # Categoría para el nuevo producto
-                if categoria_sel != OPCION_TODAS:
-                    categoria_item = categoria_sel
-                else:
-                    categoria_item = "Sin categoría"
-
-                # 👇 NUEVO: SKU aleatorio de 8 dígitos y proveedor "Por definir"
-                sku_item = str(random.randint(10_000_000, 99_999_999))
-                proveedor_item = "Por definir"
-
-                # Enviar al catálogo (aunque allá no use aún el SKU, aquí ya lo
-                # usamos para Requerimientos / Recepción / Pendientes)
-                if producto_final:
-                    enviar_nuevo_producto_a_catalogo(
-                        producto_final,
-                        categoria_item
-                    )
+        if st.button("➕ Agregar producto al requerimiento"):
+            if not producto_sel:
+                st.error("Debes seleccionar un producto.")
+            elif cantidad_req <= 0:
+                st.error("La cantidad debe ser mayor a 0.")
             else:
-                # Producto que ya existe en el catálogo
-                mask = (
-                        productos_df["Producto"]
-                        .astype(str)
-                        .str.strip()
-                        == str(producto_final).strip()
-                )
-                if mask.any():
-                    row_prod = productos_df.loc[mask].iloc[0]
-                    categoria_item = row_prod.get("Categoria", "Sin categoría")
-                    sku_item = row_prod.get("Referencia Interna", "")
-                    unidad_medida_item = row_prod.get("UdM de Compra", "pz")
-                    proveedor_item = row_prod.get("Proveedor", "")
-                else:
-                    categoria_item = (
-                        categoria_sel
-                        if categoria_sel != OPCION_TODAS
-                        else "Sin categoría"
-                    )
-
-        item = {
-                "INSUMO": producto_final,
-                "UNIDAD DE MEDIDA": "Pieza",
-                "CANTIDAD": cantidad,
-                "Observaciones": observaciones,
-                "Categoria": categoria_item,
-                "SKU": sku_item,
-                "PROVEDOR": proveedor_item,
-            }
-        st.session_state["carrito_req"].append(item)
-        st.success(
-                f"Producto agregado al requerimiento: {producto_final} "
-                f"(Cantidad: {cantidad}, Categoría: {categoria_item}, SKU: {sku_item or 'N/A'})"
-            )
+                item = {
+                    "INSUMO": producto_sel,
+                    "UNIDAD DE MEDIDA": udm_prod,
+                    "CANTIDAD": cantidad_req,
+                    "Observaciones": observaciones_req,
+                    "SKU": sku_prod,
+                    "PROVEDOR": prov_prod,
+                    "Categoria": cat_prod,
+                }
+                st.session_state["carrito_req"].append(item)
+                st.success(f"Producto '{producto_sel}' agregado al carrito.")
 
     # ----- Mostrar carrito -----
+    st.markdown("---")
+    st.subheader("🛒 Carrito de requerimientos")
+
     if st.session_state["carrito_req"]:
-        st.markdown("### 🛒 Carrito de productos del requerimiento actual")
-
         carrito_df = pd.DataFrame(st.session_state["carrito_req"])
-        carrito_df["__idx__"] = carrito_df.index
+        carrito_df["__idx__"] = range(len(carrito_df))
 
+        # Agrupar por categoría si existe
         if "Categoria" in carrito_df.columns:
-            categorias_orden = (
-                carrito_df["Categoria"]
-                .fillna("Sin categoría")
-                .astype(str)
-                .unique()
-                .tolist()
-            )
+            categorias_orden = sorted(carrito_df["Categoria"].dropna().unique().tolist())
 
             for cat in categorias_orden:
                 subset = carrito_df[carrito_df["Categoria"] == cat]
@@ -1293,8 +1222,8 @@ elif vista == "📨 Requerimientos de producto":
 
             if filtro_folio:
                 mask = (
-                    req_df_sorted["ID_REQ"].astype(str).str.lower()
-                    == filtro_folio.lower()
+                        req_df_sorted["ID_REQ"].astype(str).str.lower()
+                        == filtro_folio.lower()
                 )
                 df_filtrado = req_df_sorted[mask].copy()
 
@@ -1316,7 +1245,7 @@ elif vista == "📨 Requerimientos de producto":
 
             resumen = df_filtrado.groupby("ID_REQ", as_index=False).agg(agg_dict)
 
-            st.markdown("### 🗂 Resumen de requerimiento de compra")
+            st.markdown("### 📊 Resumen de requerimiento de compra")
             st.dataframe(
                 resumen[cols_resumen].reset_index(drop=True),
                 use_container_width=True,
@@ -1389,6 +1318,8 @@ elif vista == "📥 Recepción":
             st.error("Debes capturar un folio de requerimiento (ID_REQ).")
         else:
             try:
+                # ✅ FIX #1: Limpiar cache antes de cargar para datos frescos
+                load_requerimientos_from_gsheet.clear()
                 req_df = load_requerimientos_from_gsheet()
 
                 if "ID_REQ" not in req_df.columns:
@@ -1408,12 +1339,30 @@ elif vista == "📥 Recepción":
                     st.session_state["req_recepcion_df"] = None
                     st.session_state["req_recepcion_id"] = id_req_input.strip()
                 else:
+                    # ✅ FIX #6: Limpiar filas con INSUMO vacío o NaN
                     if "INSUMO" in df_req_folio.columns:
+                        df_req_folio = df_req_folio[df_req_folio["INSUMO"].notna()].copy()
+                        df_req_folio["INSUMO"] = df_req_folio["INSUMO"].astype(str).str.strip()
+                        df_req_folio = df_req_folio[df_req_folio["INSUMO"] != ""]
                         df_req_folio = df_req_folio.sort_values("INSUMO")
+
+                    # ✅ FIX #2: Convertir CANTIDAD a numérico
+                    if "CANTIDAD" in df_req_folio.columns:
+                        df_req_folio["CANTIDAD"] = pd.to_numeric(
+                            df_req_folio["CANTIDAD"], errors="coerce"
+                        ).fillna(0.0)
 
                     st.session_state["req_recepcion_df"] = df_req_folio
                     st.session_state["req_recepcion_id"] = id_req_input.strip()
+
+                    # ✅ FIX #3: Incrementar versión del editor para forzar recreación
+                    st.session_state["editor_version"] += 1
+
                     st.success("Requerimiento cargado correctamente.")
+
+                    # ✅ FIX #5: Forzar rerun para evitar race conditions
+                    st.rerun()
+
             except Exception as e:
                 st.error(
                     "No se pudo cargar la hoja de requerimientos desde Google Sheets. "
@@ -1497,7 +1446,10 @@ elif vista == "📥 Recepción":
             base_df["OBSERVACIONES"] = ""
             base_df["fecha de caducidad"] = pd.NaT
 
-            # Editor (sin callbacks raros)
+            # ✅ FIX #3: Key único con versión para forzar recreación
+            editor_key = f"editor_recepcion_{id_req_actual}_{st.session_state.get('editor_version', 0)}"
+
+            # Editor
             edited_df = st.data_editor(
                 base_df,
                 column_config={
@@ -1557,7 +1509,7 @@ elif vista == "📥 Recepción":
                 },
                 num_rows="fixed",
                 use_container_width=True,
-                key=f"editor_recepcion_{id_req_actual or 'sin_folio'}",
+                key=editor_key,
             )
 
             st.markdown(
@@ -1699,7 +1651,7 @@ elif vista == "📥 Recepción":
                 # Filtrar por folio
                 req_folio = req_df[
                     req_df["ID_REQ"].astype(str).str.strip() == id_req_pend.strip()
-                ].copy()
+                    ].copy()
 
                 if req_folio.empty:
                     st.warning(
