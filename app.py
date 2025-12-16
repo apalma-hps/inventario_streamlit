@@ -710,6 +710,129 @@ def load_recepcion_from_gsheet() -> pd.DataFrame:
     return df
 
 
+# --------------------------------------------------
+# Funciones para recepciones parciales
+# --------------------------------------------------
+def calcular_pendientes_por_producto(id_req: str, df_req_folio: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calcula la cantidad pendiente por producto usando los datos de la misma hoja de requerimientos.
+    Las columnas CANTIDAD RECIBIDA y CANTIDAD PENDIENTE ya vienen en df_req_folio.
+    """
+
+    # DEBUG
+    with st.expander("🔍 DEBUG: Columnas disponibles en requerimiento", expanded=False):
+        st.write("**Columnas en df_req_folio:**")
+        st.code(list(df_req_folio.columns))
+        st.write("**Primeras filas:**")
+        st.dataframe(df_req_folio.head(5))
+
+    # Buscar columnas de cantidad recibida y pendiente (pueden tener variaciones en nombre)
+    col_cant_recibida = None
+    col_cant_pendiente = None
+
+    for col in df_req_folio.columns:
+        col_lower = col.lower().strip()
+        if "cantidad recibida" in col_lower and col_cant_recibida is None:
+            col_cant_recibida = col
+        if "cantidad pendiente" in col_lower and col_cant_pendiente is None:
+            col_cant_pendiente = col
+
+    # Preparar base del requerimiento agrupando por producto
+    group_cols = ["INSUMO"]
+    if "SKU" in df_req_folio.columns:
+        group_cols = ["INSUMO", "SKU"]
+
+    # Convertir columnas numéricas
+    df_req_folio["CANTIDAD"] = pd.to_numeric(df_req_folio["CANTIDAD"], errors="coerce").fillna(0.0)
+
+    if col_cant_recibida:
+        df_req_folio[col_cant_recibida] = pd.to_numeric(df_req_folio[col_cant_recibida], errors="coerce").fillna(0.0)
+
+    if col_cant_pendiente:
+        df_req_folio[col_cant_pendiente] = pd.to_numeric(df_req_folio[col_cant_pendiente], errors="coerce").fillna(0.0)
+
+    # Agrupar por producto
+    agg_dict = {"CANTIDAD": "sum"}
+    if col_cant_recibida:
+        agg_dict[col_cant_recibida] = "sum"
+    if col_cant_pendiente:
+        agg_dict[col_cant_pendiente] = "sum"
+
+    base_df = df_req_folio.groupby(group_cols, as_index=False).agg(agg_dict)
+    base_df = base_df.rename(columns={"CANTIDAD": "CANTIDAD PO"})
+
+    # Renombrar columnas de recibido y pendiente
+    if col_cant_recibida:
+        base_df = base_df.rename(columns={col_cant_recibida: "CANTIDAD RECIBIDA TOTAL"})
+    else:
+        base_df["CANTIDAD RECIBIDA TOTAL"] = 0.0
+
+    if col_cant_pendiente:
+        base_df = base_df.rename(columns={col_cant_pendiente: "CANTIDAD PENDIENTE"})
+    else:
+        # Calcular pendiente si no existe la columna
+        base_df["CANTIDAD PENDIENTE"] = base_df["CANTIDAD PO"] - base_df["CANTIDAD RECIBIDA TOTAL"]
+
+    # Asegurar que pendiente no sea negativo
+    base_df["CANTIDAD PENDIENTE"] = base_df["CANTIDAD PENDIENTE"].clip(lower=0)
+
+    # Asegurar SKU existe
+    if "SKU" not in base_df.columns:
+        base_df["SKU"] = ""
+
+    # Agregar proveedor
+    if "PROVEDOR" in df_req_folio.columns:
+        prov_map = df_req_folio[["INSUMO", "PROVEDOR"]].drop_duplicates(subset=["INSUMO"])
+        prov_map["INSUMO"] = prov_map["INSUMO"].astype(str).str.strip()
+        base_df["INSUMO"] = base_df["INSUMO"].astype(str).str.strip()
+        base_df = base_df.merge(prov_map, on="INSUMO", how="left")
+        base_df.rename(columns={"PROVEDOR": "PROVEEDOR"}, inplace=True)
+    else:
+        base_df["PROVEEDOR"] = ""
+
+    # DEBUG: mostrar resultado
+    with st.expander("🔍 DEBUG: Resultado de pendientes calculados", expanded=False):
+        st.write(f"**Columna de recibido encontrada:** `{col_cant_recibida}`")
+        st.write(f"**Columna de pendiente encontrada:** `{col_cant_pendiente}`")
+        st.dataframe(base_df)
+
+    return base_df
+
+
+def obtener_historial_recepciones(id_req: str) -> pd.DataFrame:
+    """
+    Obtiene el historial de recepciones para un requerimiento.
+    Como todo está en la misma hoja, filtra las filas que tienen folio de recepción.
+    """
+    try:
+        load_requerimientos_from_gsheet.clear()
+        req_df = load_requerimientos_from_gsheet()
+        req_df.columns = req_df.columns.astype(str).str.strip()
+    except Exception:
+        return pd.DataFrame()
+
+    if req_df.empty or "ID_REQ" not in req_df.columns:
+        return pd.DataFrame()
+
+    # Filtrar por ID_REQ
+    req_folio = req_df[
+        req_df["ID_REQ"].astype(str).str.strip() == id_req.strip()
+        ].copy()
+
+    # Buscar columna de folio de recepción
+    col_folio_recep = None
+    for col in req_folio.columns:
+        if "folio" in col.lower() and "recep" in col.lower():
+            col_folio_recep = col
+            break
+
+    # Solo mostrar filas que tienen folio de recepción (ya fueron recibidas)
+    if col_folio_recep and col_folio_recep in req_folio.columns:
+        req_folio = req_folio[req_folio[col_folio_recep].notna() & (req_folio[col_folio_recep] != "")]
+
+    return req_folio
+
+
 def generar_folio_requerimiento() -> tuple[str, str, str]:
     tz = pytz.timezone("America/Mexico_City")
     ahora = datetime.now(tz)
@@ -1396,7 +1519,7 @@ elif vista == "📥 Recepción":
             hide_index=True,
         )
 
-        # ---------- 3) Tabla editable: recepción por insumo ----------
+        # ---------- 3) Tabla editable: recepción por insumo (CON SOPORTE PARCIAL) ----------
         st.markdown("### 📦 Registro de recepción por insumo")
 
         if "INSUMO" not in df_req_folio.columns or "CANTIDAD" not in df_req_folio.columns:
@@ -1405,51 +1528,69 @@ elif vista == "📥 Recepción":
                 "para construir la tabla de recepción."
             )
         else:
-            # Base de agregación
-            if "SKU" in df_req_folio.columns:
-                base_df = (
-                    df_req_folio.groupby(["INSUMO", "SKU"], as_index=False)["CANTIDAD"]
-                    .sum()
-                    .rename(columns={"CANTIDAD": "CANTIDAD PO"})
-                )
+            # ✅ NUEVO: Calcular pendientes considerando recepciones previas
+            pendientes_df = calcular_pendientes_por_producto(id_req_actual, df_req_folio)
+
+            # Mostrar resumen de estado
+            total_po = pendientes_df["CANTIDAD PO"].sum()
+            total_recibido = pendientes_df["CANTIDAD RECIBIDA TOTAL"].sum()
+            total_pendiente = pendientes_df["CANTIDAD PENDIENTE"].sum()
+
+            col_res1, col_res2, col_res3 = st.columns(3)
+            col_res1.metric("📦 Total PO", f"{total_po:.0f}")
+            col_res2.metric("✅ Ya Recibido", f"{total_recibido:.0f}")
+            col_res3.metric("⏳ Pendiente", f"{total_pendiente:.0f}")
+
+            # ✅ NUEVO: Mostrar historial de recepciones previas
+            historial_df = obtener_historial_recepciones(id_req_actual)
+            if not historial_df.empty:
+                with st.expander("📋 Ver historial de recepciones anteriores", expanded=False):
+                    # Columnas adaptadas a la hoja de Requerimientos
+                    cols_hist = [c for c in [
+                        "Folio Generado de Recepcion", "Fecha de recepción app", "INSUMO",
+                        "CANTIDAD RECIBIDA", "CANTIDAD PENDIENTE", "Estatus Recepción",
+                        "CALIDAD (OK / RECHAZO)", "OBSERVACIONES RECEPCIÓN", "RECIBIÓ"
+                    ] if c in historial_df.columns]
+
+                    if cols_hist:
+                        st.dataframe(
+                            historial_df[cols_hist].reset_index(drop=True),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                    else:
+                        st.dataframe(historial_df.reset_index(drop=True), use_container_width=True)
+
+            # ✅ NUEVO: Opción para ver solo pendientes o todos
+            mostrar_opcion = st.radio(
+                "¿Qué productos mostrar?",
+                options=["Solo pendientes", "Todos los productos"],
+                horizontal=True,
+                key="mostrar_productos_opcion"
+            )
+
+            if mostrar_opcion == "Solo pendientes":
+                base_df = pendientes_df[pendientes_df["CANTIDAD PENDIENTE"] > 0].copy()
+                if base_df.empty:
+                    st.success("🎉 ¡Todos los productos de este requerimiento ya fueron recibidos!")
+                    st.stop()
             else:
-                base_df = (
-                    df_req_folio.groupby("INSUMO", as_index=False)["CANTIDAD"]
-                    .sum()
-                    .rename(columns={"CANTIDAD": "CANTIDAD PO"})
-                )
+                base_df = pendientes_df.copy()
 
-            # Proveedor por insumo (PROVEDOR → PROVEEDOR)
-            if "PROVEDOR" in df_req_folio.columns:
-                prov_por_insumo = (
-                    df_req_folio[["INSUMO", "PROVEDOR"]]
-                    .dropna(subset=["INSUMO"])
-                    .copy()
-                )
-                prov_por_insumo["INSUMO"] = prov_por_insumo["INSUMO"].astype(str).str.strip()
-                prov_por_insumo["PROVEDOR"] = prov_por_insumo["PROVEDOR"].astype(str).str.strip()
-                prov_por_insumo = prov_por_insumo.drop_duplicates(subset=["INSUMO"])
-
-                base_df["INSUMO"] = base_df["INSUMO"].astype(str).str.strip()
-                base_df = base_df.merge(prov_por_insumo, on="INSUMO", how="left")
-                base_df.rename(columns={"PROVEDOR": "PROVEEDOR"}, inplace=True)
-            else:
-                base_df["PROVEEDOR"] = ""
-
-            # Campos a llenar
+            # Preparar campos editables
             base_df["Fecha de recepción"] = date.today()
             base_df["FACTURA / TICKET"] = ""
             base_df["RECIBIÓ"] = ""
-            base_df["CANTIDAD RECIBIDA"] = 0.0
+            base_df["CANTIDAD A RECIBIR"] = 0.0
             base_df["TEMP (°C)"] = 0.0
             base_df["CALIDAD (OK / RECHAZO)"] = "OK"
             base_df["OBSERVACIONES"] = ""
             base_df["fecha de caducidad"] = pd.NaT
 
-            # ✅ FIX #3: Key único con versión para forzar recreación
+            # Key único con versión para forzar recreación
             editor_key = f"editor_recepcion_{id_req_actual}_{st.session_state.get('editor_version', 0)}"
 
-            # Editor
+            # Editor con columnas mejoradas
             edited_df = st.data_editor(
                 base_df,
                 column_config={
@@ -1464,63 +1605,98 @@ elif vista == "📥 Recepción":
                     "CANTIDAD PO": st.column_config.NumberColumn(
                         "Cantidad PO",
                         disabled=True,
+                        help="Cantidad solicitada en el requerimiento original",
+                    ),
+                    "CANTIDAD RECIBIDA TOTAL": st.column_config.NumberColumn(
+                        "Ya Recibido",
+                        disabled=True,
+                        help="Cantidad ya recibida en recepciones anteriores",
+                    ),
+                    "CANTIDAD PENDIENTE": st.column_config.NumberColumn(
+                        "Pendiente",
+                        disabled=True,
+                        help="Cantidad que falta por recibir",
                     ),
                     "PROVEEDOR": st.column_config.TextColumn(
-                        "PROVEEDOR",
+                        "Proveedor",
                         disabled=True,
                     ),
                     "Fecha de recepción": st.column_config.DateColumn(
                         "Fecha de recepción",
-                        help="A llenar por cada línea.",
+                        help="Fecha de esta recepción",
                     ),
                     "FACTURA / TICKET": st.column_config.TextColumn(
-                        "FACTURA / TICKET",
-                        help="Número de factura o ticket.",
+                        "Factura / Ticket",
+                        help="Número de factura o ticket",
                     ),
                     "RECIBIÓ": st.column_config.TextColumn(
-                        "RECIBIÓ",
-                        help="Persona que recibe ese producto.",
+                        "Recibió",
+                        help="Persona que recibe",
                     ),
-                    "CANTIDAD RECIBIDA": st.column_config.NumberColumn(
-                        "CANTIDAD RECIBIDA",
-                        help="Cuánto llegó realmente.",
+                    "CANTIDAD A RECIBIR": st.column_config.NumberColumn(
+                        "🆕 Cantidad a Recibir",
+                        help="Cantidad que estás recibiendo AHORA (puede ser parcial)",
                         min_value=0.0,
                     ),
                     "TEMP (°C)": st.column_config.NumberColumn(
-                        "TEMP (°C)",
-                        help="Temperatura al recibir (si aplica).",
+                        "Temp (°C)",
+                        help="Temperatura al recibir (si aplica)",
                         min_value=-50.0,
                         max_value=100.0,
                         step=0.5,
                     ),
                     "CALIDAD (OK / RECHAZO)": st.column_config.SelectboxColumn(
-                        "CALIDAD (OK / RECHAZO)",
+                        "Calidad",
                         options=["OK", "RECHAZO"],
-                        help="Indica si se acepta o se rechaza.",
+                        help="Indica si se acepta o rechaza",
                     ),
                     "OBSERVACIONES": st.column_config.TextColumn(
-                        "OBSERVACIONES",
-                        help="Obligatorio si no se recibió nada o hay rechazo.",
+                        "Observaciones",
+                        help="Obligatorio si hay rechazo",
                     ),
                     "fecha de caducidad": st.column_config.DateColumn(
-                        "Fecha de caducidad",
-                        help="Fecha de caducidad del lote recibido.",
+                        "Fecha caducidad",
+                        help="Fecha de caducidad del lote",
                     ),
                 },
                 num_rows="fixed",
                 use_container_width=True,
                 key=editor_key,
+                column_order=[
+                    "INSUMO", "SKU", "CANTIDAD PO", "CANTIDAD RECIBIDA TOTAL", "CANTIDAD PENDIENTE",
+                    "PROVEEDOR", "Fecha de recepción", "FACTURA / TICKET", "RECIBIÓ",
+                    "CANTIDAD A RECIBIR", "TEMP (°C)", "CALIDAD (OK / RECHAZO)", "OBSERVACIONES", "fecha de caducidad"
+                ],
             )
 
             st.markdown(
-                "> **Producto / Cantidad PO / PROVEEDOR** vienen del requerimiento y están bloqueados.  \n"
-                "> Los campos **Fecha de recepción, FACTURA / TICKET, RECIBIÓ, CANTIDAD RECIBIDA, TEMP, CALIDAD, "
-                "OBSERVACIONES y fecha de caducidad** se llenan por cada fila."
+                "> **💡 Tip:** Solo se enviarán los productos donde captures una **'Cantidad a Recibir' > 0**.  \n"
+                "> Puedes hacer recepciones parciales y volver después a completar el resto."
             )
+
+            # ✅ NUEVO: Mostrar resumen de lo que se va a enviar
+            if edited_df is not None:
+                df_a_enviar = edited_df[edited_df["CANTIDAD A RECIBIR"] > 0].copy()
+
+                if not df_a_enviar.empty:
+                    st.markdown("#### 📤 Resumen de lo que se enviará:")
+                    st.dataframe(
+                        df_a_enviar[
+                            ["INSUMO", "CANTIDAD A RECIBIR", "CALIDAD (OK / RECHAZO)", "OBSERVACIONES"]].reset_index(
+                            drop=True),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                    st.info(f"Se enviarán **{len(df_a_enviar)}** producto(s) con cantidad > 0")
 
             # ---------- 4) Botón para registrar recepción ----------
             col_btn1, col_btn2 = st.columns(2)
-            btn_enviar_recep = col_btn2.button("✅ Confirmar y registrar recepción")
+            btn_limpiar = col_btn1.button("🧹 Limpiar tabla de recepción")
+            btn_enviar_recep = col_btn2.button("✅ Registrar recepción parcial")
+
+            if btn_limpiar:
+                st.session_state["editor_version"] += 1
+                st.rerun()
 
             if btn_enviar_recep:
                 errores = []
@@ -1536,38 +1712,53 @@ elif vista == "📥 Recepción":
                         "La tabla de recepción está vacía. Verifica el requerimiento."
                     )
 
-                if edited_df is not None:
-                    for _, row in edited_df.iterrows():
-                        cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
+                # ✅ NUEVO: Filtrar solo productos con cantidad > 0
+                df_a_enviar = edited_df[
+                    edited_df["CANTIDAD A RECIBIR"] > 0].copy() if edited_df is not None else pd.DataFrame()
+
+                if df_a_enviar.empty:
+                    errores.append(
+                        "No hay productos con 'Cantidad a Recibir' > 0. "
+                        "Captura al menos un producto para enviar."
+                    )
+
+                # Validar observaciones en rechazos y cantidades
+                if not df_a_enviar.empty:
+                    for _, row in df_a_enviar.iterrows():
                         calidad = str(row.get("CALIDAD (OK / RECHAZO)", "OK") or "OK")
                         obs = str(row.get("OBSERVACIONES", "") or "").strip()
 
-                        if (cant_rec == 0 or calidad == "RECHAZO") and obs == "":
+                        if calidad == "RECHAZO" and obs == "":
                             errores.append(
-                                f"En el producto '{row.get('INSUMO', '')}' la cantidad recibida es 0 o RECHAZO "
-                                "y no hay observaciones. Debes agregar una nota."
+                                f"El producto '{row.get('INSUMO', '')}' tiene RECHAZO "
+                                "pero no hay observaciones."
+                            )
+
+                        # Validar que no exceda pendiente
+                        cant_recibir = float(row.get("CANTIDAD A RECIBIR", 0) or 0)
+                        cant_pendiente = float(row.get("CANTIDAD PENDIENTE", 0) or 0)
+                        if cant_recibir > cant_pendiente:
+                            errores.append(
+                                f"El producto '{row.get('INSUMO', '')}' tiene cantidad a recibir ({cant_recibir:.0f}) "
+                                f"mayor que la pendiente ({cant_pendiente:.0f})."
                             )
 
                 if errores:
                     st.error("No se pudo registrar la recepción:")
                     for e in errores:
-                        st.write("-", e)
+                        st.write("•", e)
                 else:
                     folio_recep, fecha_folio, hora_folio = generar_folio_recepcion()
                     st.info(
-                        f"Folio de recepción generado: **{folio_recep}**  \n"
-                        f"Fecha de recepción (folio): **{fecha_folio}**  \n"
-                        f"Hora de recepción (folio): **{hora_folio}**"
+                        f"**Folio de recepción:** {folio_recep}  \n"
+                        f"**Fecha:** {fecha_folio} | **Hora:** {hora_folio}"
                     )
 
                     lista_recepcion_data = []
-                    for _, row in edited_df.iterrows():
+                    for _, row in df_a_enviar.iterrows():
                         cant_po = float(row.get("CANTIDAD PO", 0) or 0)
-                        cant_rec = float(row.get("CANTIDAD RECIBIDA", 0) or 0)
+                        cant_rec = float(row.get("CANTIDAD A RECIBIR", 0) or 0)
                         obs = str(row.get("OBSERVACIONES", "") or "")
-
-                        if cant_po == 0 and cant_rec == 0 and obs.strip() == "":
-                            continue
 
                         # Fecha de recepción
                         fecha_linea = row.get("Fecha de recepción", date.today())
@@ -1609,13 +1800,21 @@ elif vista == "📥 Recepción":
                         }
                         lista_recepcion_data.append(rec_data)
 
-                    if not lista_recepcion_data:
-                        st.warning(
-                            "No hay líneas válidas para registrar (todas con cantidades 0 y sin observaciones). "
-                            "No se envió nada."
-                        )
-                    else:
+                    if lista_recepcion_data:
                         enviar_recepcion_a_gsheet(lista_recepcion_data)
+
+                        # Limpiar para mostrar datos actualizados
+                        st.session_state["editor_version"] += 1
+                        st.success(
+                            f"✅ Se registraron {len(lista_recepcion_data)} producto(s). "
+                            "Recargando datos actualizados..."
+                        )
+
+                        # Dar tiempo para que Google Sheets procese
+                        import time
+
+                        time.sleep(1.5)
+                        st.rerun()
 
 
     else:
