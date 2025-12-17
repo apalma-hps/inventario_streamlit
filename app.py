@@ -767,11 +767,17 @@ def calcular_pendientes_por_producto(id_req: str, df_req_folio: pd.DataFrame) ->
     else:
         base_df["CANTIDAD RECIBIDA TOTAL"] = 0.0
 
-    if col_cant_pendiente:
-        base_df = base_df.rename(columns={col_cant_pendiente: "CANTIDAD PENDIENTE"})
-    else:
-        # Calcular pendiente si no existe la columna
-        base_df["CANTIDAD PENDIENTE"] = base_df["CANTIDAD PO"] - base_df["CANTIDAD RECIBIDA TOTAL"]
+    # Siempre recalcular pendiente
+    base_df["CANTIDAD PENDIENTE"] = (
+            base_df["CANTIDAD PO"] - base_df["CANTIDAD RECIBIDA TOTAL"]
+    )
+
+    # Seguridad
+    base_df["CANTIDAD PENDIENTE"] = (
+        base_df["CANTIDAD PENDIENTE"]
+        .fillna(0)
+        .clip(lower=0)
+    )
 
     # Asegurar que pendiente no sea negativo
     base_df["CANTIDAD PENDIENTE"] = base_df["CANTIDAD PENDIENTE"].clip(lower=0)
