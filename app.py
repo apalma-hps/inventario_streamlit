@@ -1684,16 +1684,28 @@ elif vista == "📥 Recepción":
             if edited_df is not None:
                 df_a_enviar = edited_df[edited_df["CANTIDAD A RECIBIR"] > 0].copy()
 
+                # Validar observaciones en rechazos y cantidades
                 if not df_a_enviar.empty:
-                    st.markdown("#### 📤 Resumen de lo que se enviará:")
-                    st.dataframe(
-                        df_a_enviar[
-                            ["INSUMO", "CANTIDAD A RECIBIR", "CALIDAD (OK / RECHAZO)", "OBSERVACIONES"]].reset_index(
-                            drop=True),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-                    st.info(f"Se enviarán **{len(df_a_enviar)}** producto(s) con cantidad > 0")
+                    eps = 1e-6  # tolerancia para errores flotantes
+
+                    for _, row in df_a_enviar.iterrows():
+                        calidad = str(row.get("CALIDAD (OK / RECHAZO)", "OK") or "OK")
+                        obs = str(row.get("OBSERVACIONES", "") or "").strip()
+
+                        cant_recibir = float(row.get("CANTIDAD A RECIBIR", 0) or 0)
+                        cant_pendiente = float(row.get("CANTIDAD PENDIENTE", 0) or 0)
+
+                        if calidad == "RECHAZO" and obs == "":
+                            errores.append(
+                                f"El producto '{row.get('INSUMO', '')}' tiene RECHAZO pero no hay observaciones."
+                            )
+
+                        # ✅ Comparación robusta (NO falla por decimales)
+                        if cant_recibir > cant_pendiente + eps:
+                            errores.append(
+                                f"El producto '{row.get('INSUMO', '')}' tiene cantidad a recibir ({cant_recibir:.2f}) "
+                                f"mayor que la pendiente ({cant_pendiente:.2f})."
+                            )
 
             # ---------- 4) Botón para registrar recepción ----------
             col_btn1, col_btn2 = st.columns(2)
@@ -1741,13 +1753,16 @@ elif vista == "📥 Recepción":
                             )
 
                         # Validar que no exceda pendiente
-                        cant_recibir = float(row.get("CANTIDAD A RECIBIR", 0) or 0)
-                        cant_pendiente = float(row.get("CANTIDAD PENDIENTE", 0) or 0)
-                        if cant_recibir > cant_pendiente:
+                        cant_recibir_r = round(cant_recibir, 2)
+                        cant_pendiente_r = round(cant_pendiente, 2)
+
+                        if cant_recibir_r > cant_pendiente_r:
                             errores.append(
-                                f"El producto '{row.get('INSUMO', '')}' tiene cantidad a recibir ({cant_recibir:.0f}) "
-                                f"mayor que la pendiente ({cant_pendiente:.0f})."
+                                f"El producto '{row.get('INSUMO', '')}' tiene cantidad a recibir ({cant_recibir_r:.2f}) "
+                                f"mayor que la pendiente ({cant_pendiente_r:.2f})."
                             )
+
+
 
                 if errores:
                     st.error("No se pudo registrar la recepción:")
