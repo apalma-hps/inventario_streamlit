@@ -448,7 +448,6 @@ if "req_recepcion_df" not in st.session_state:
 if "req_recepcion_id" not in st.session_state:
     st.session_state["req_recepcion_id"] = ""
 
-# ✅ FIX #3: Contador para forzar recreación del data_editor
 if "editor_version" not in st.session_state:
     st.session_state["editor_version"] = 0
 
@@ -571,7 +570,6 @@ def enviar_a_consolidado(df: pd.DataFrame):
             return x.isoformat()
         return x
 
-    # ✅ FIX #4: Usar .map() en lugar de .applymap() (deprecado en pandas 2.1+)
     df_json = df_json.map(to_jsonable)
     df_json = df_json.astype(object).where(pd.notnull(df_json), None)
 
@@ -719,14 +717,12 @@ def calcular_pendientes_por_producto(id_req: str, df_req_folio: pd.DataFrame) ->
     Las columnas CANTIDAD RECIBIDA y CANTIDAD PENDIENTE ya vienen en df_req_folio.
     """
 
-    # DEBUG
     with st.expander("🔍 DEBUG: Columnas disponibles en requerimiento", expanded=False):
         st.write("**Columnas en df_req_folio:**")
         st.code(list(df_req_folio.columns))
         st.write("**Primeras filas:**")
         st.dataframe(df_req_folio.head(5))
 
-    # Buscar columnas de cantidad recibida y pendiente (pueden tener variaciones en nombre)
     col_cant_recibida = None
     col_cant_pendiente = None
 
@@ -737,12 +733,10 @@ def calcular_pendientes_por_producto(id_req: str, df_req_folio: pd.DataFrame) ->
         if "cantidad pendiente" in col_lower and col_cant_pendiente is None:
             col_cant_pendiente = col
 
-    # Preparar base del requerimiento agrupando por producto
     group_cols = ["INSUMO"]
     if "SKU" in df_req_folio.columns:
         group_cols = ["INSUMO", "SKU"]
 
-    # Convertir columnas numéricas
     df_req_folio["CANTIDAD"] = pd.to_numeric(df_req_folio["CANTIDAD"], errors="coerce").fillna(0.0)
 
     if col_cant_recibida:
@@ -751,7 +745,6 @@ def calcular_pendientes_por_producto(id_req: str, df_req_folio: pd.DataFrame) ->
     if col_cant_pendiente:
         df_req_folio[col_cant_pendiente] = pd.to_numeric(df_req_folio[col_cant_pendiente], errors="coerce").fillna(0.0)
 
-    # Agrupar por producto
     agg_dict = {"CANTIDAD": "sum"}
     if col_cant_recibida:
         agg_dict[col_cant_recibida] = "sum"
@@ -761,32 +754,26 @@ def calcular_pendientes_por_producto(id_req: str, df_req_folio: pd.DataFrame) ->
     base_df = df_req_folio.groupby(group_cols, as_index=False).agg(agg_dict)
     base_df = base_df.rename(columns={"CANTIDAD": "CANTIDAD PO"})
 
-    # Renombrar columnas de recibido y pendiente
     if col_cant_recibida:
         base_df = base_df.rename(columns={col_cant_recibida: "CANTIDAD RECIBIDA TOTAL"})
     else:
         base_df["CANTIDAD RECIBIDA TOTAL"] = 0.0
 
-    # Siempre recalcular pendiente
     base_df["CANTIDAD PENDIENTE"] = (
             base_df["CANTIDAD PO"] - base_df["CANTIDAD RECIBIDA TOTAL"]
     )
 
-    # Seguridad
     base_df["CANTIDAD PENDIENTE"] = (
         base_df["CANTIDAD PENDIENTE"]
         .fillna(0)
         .clip(lower=0)
     )
 
-    # Asegurar que pendiente no sea negativo
     base_df["CANTIDAD PENDIENTE"] = base_df["CANTIDAD PENDIENTE"].clip(lower=0)
 
-    # Asegurar SKU existe
     if "SKU" not in base_df.columns:
         base_df["SKU"] = ""
 
-    # Agregar proveedor
     if "PROVEDOR" in df_req_folio.columns:
         prov_map = df_req_folio[["INSUMO", "PROVEDOR"]].drop_duplicates(subset=["INSUMO"])
         prov_map["INSUMO"] = prov_map["INSUMO"].astype(str).str.strip()
@@ -796,7 +783,6 @@ def calcular_pendientes_por_producto(id_req: str, df_req_folio: pd.DataFrame) ->
     else:
         base_df["PROVEEDOR"] = ""
 
-    # DEBUG: mostrar resultado
     with st.expander("🔍 DEBUG: Resultado de pendientes calculados", expanded=False):
         st.write(f"**Columna de recibido encontrada:** `{col_cant_recibida}`")
         st.write(f"**Columna de pendiente encontrada:** `{col_cant_pendiente}`")
@@ -820,19 +806,16 @@ def obtener_historial_recepciones(id_req: str) -> pd.DataFrame:
     if req_df.empty or "ID_REQ" not in req_df.columns:
         return pd.DataFrame()
 
-    # Filtrar por ID_REQ
     req_folio = req_df[
         req_df["ID_REQ"].astype(str).str.strip() == id_req.strip()
         ].copy()
 
-    # Buscar columna de folio de recepción
     col_folio_recep = None
     for col in req_folio.columns:
         if "folio" in col.lower() and "recep" in col.lower():
             col_folio_recep = col
             break
 
-    # Solo mostrar filas que tienen folio de recepción (ya fueron recibidas)
     if col_folio_recep and col_folio_recep in req_folio.columns:
         req_folio = req_folio[req_folio[col_folio_recep].notna() & (req_folio[col_folio_recep] != "")]
 
@@ -876,7 +859,6 @@ def enviar_requerimientos_a_gsheet(lista_req_data):
     try:
         resp = requests.post(url, json=payload, timeout=10)
 
-        # DEBUG: mostrar siempre la respuesta cruda
         st.markdown("#### Respuesta cruda de Apps Script (requerimientos – debug)")
         st.code(resp.text, language="json")
 
@@ -930,15 +912,11 @@ def enviar_recepcion_a_gsheet(lista_recepcion_data):
 
     payload = {
         "rows": rows,
-        "accion": "registrar_recepcion",  # por si lo usas en Apps Script
+        "accion": "registrar_recepcion",
     }
 
     try:
         resp = requests.post(url, json=payload, timeout=10)
-
-        # Debug opcional:
-        # st.markdown("#### Respuesta cruda de Apps Script (recepción – debug)")
-        # st.code(resp.text, language="json")
 
         if resp.status_code != 200:
             st.error(
@@ -958,7 +936,6 @@ def enviar_recepcion_a_gsheet(lista_recepcion_data):
 
         status = data.get("status")
         if status == "ok":
-            # Solo mostramos 'Filas insertadas' si viene en el JSON
             inserted = data.get("inserted", None)
             if inserted is not None:
                 st.success(
@@ -1137,7 +1114,6 @@ elif vista == "📦 Requerimientos de producto":
             key="producto_seleccionado",
         )
 
-        # Obtener datos del producto seleccionado
         fila_prod = productos_filtrados[productos_filtrados["Producto"] == producto_sel]
         if not fila_prod.empty:
             sku_prod = fila_prod.iloc[0].get("Referencia Interna", "")
@@ -1182,7 +1158,6 @@ elif vista == "📦 Requerimientos de producto":
                 st.session_state["carrito_req"].append(item)
                 st.success(f"Producto '{producto_sel}' agregado al carrito.")
 
-    # ----- Mostrar carrito -----
     st.markdown("---")
     st.subheader("🛒 Carrito de requerimientos")
 
@@ -1190,7 +1165,6 @@ elif vista == "📦 Requerimientos de producto":
         carrito_df = pd.DataFrame(st.session_state["carrito_req"])
         carrito_df["__idx__"] = range(len(carrito_df))
 
-        # Agrupar por categoría si existe
         if "Categoria" in carrito_df.columns:
             categorias_orden = sorted(carrito_df["Categoria"].dropna().unique().tolist())
 
@@ -1246,7 +1220,6 @@ elif vista == "📦 Requerimientos de producto":
             st.session_state["carrito_req"] = []
             st.info("Carrito vaciado.")
 
-        # ----- Enviar requerimiento -----
         if send_req:
             errores = []
 
@@ -1254,7 +1227,6 @@ elif vista == "📦 Requerimientos de producto":
             hoy = datetime.now(tz).date()
             diferencia_dias = (fecha_requerida - hoy).days
 
-            # Lead time mínimo de 4 días (excepto Flautas Lamartine)
             if ceco_destino != "Flautas Lamartine":
                 if diferencia_dias < 4:
                     st.warning(
@@ -1265,8 +1237,7 @@ elif vista == "📦 Requerimientos de producto":
                         "La *Fecha requerida* debe ser al menos 4 días después de la fecha actual."
                     )
 
-            # No se permiten sábados ni domingos en la fecha requerida
-            if fecha_requerida.weekday() >= 5:  # 5 = sábado, 6 = domingo
+            if fecha_requerida.weekday() >= 5:
                 errores.append(
                     "La *Fecha requerida* no puede ser sábado ni domingo. "
                     "Elige un día hábil (lunes a viernes)."
@@ -1320,7 +1291,6 @@ elif vista == "📦 Requerimientos de producto":
     else:
         send_req = False
 
-    # ----- Consulta estatus de requerimientos -----
     st.subheader("🔍 Consultar estatus de requerimientos")
 
     _, col_f2 = st.columns(2)
@@ -1433,7 +1403,6 @@ elif vista == "📥 Recepción":
     except Exception:
         catalogo_df = pd.DataFrame()
 
-    # ---------- 1) Buscar requerimiento por folio ----------
     col_buscar1, col_buscar2 = st.columns([2, 1])
     id_req_input = col_buscar1.text_input(
         "Folio de requerimiento (ID_REQ)",
@@ -1447,7 +1416,6 @@ elif vista == "📥 Recepción":
             st.error("Debes capturar un folio de requerimiento (ID_REQ).")
         else:
             try:
-                # ✅ FIX #1: Limpiar cache antes de cargar para datos frescos
                 load_requerimientos_from_gsheet.clear()
                 req_df = load_requerimientos_from_gsheet()
 
@@ -1468,14 +1436,12 @@ elif vista == "📥 Recepción":
                     st.session_state["req_recepcion_df"] = None
                     st.session_state["req_recepcion_id"] = id_req_input.strip()
                 else:
-                    # ✅ FIX #6: Limpiar filas con INSUMO vacío o NaN
                     if "INSUMO" in df_req_folio.columns:
                         df_req_folio = df_req_folio[df_req_folio["INSUMO"].notna()].copy()
                         df_req_folio["INSUMO"] = df_req_folio["INSUMO"].astype(str).str.strip()
                         df_req_folio = df_req_folio[df_req_folio["INSUMO"] != ""]
                         df_req_folio = df_req_folio.sort_values("INSUMO")
 
-                    # ✅ FIX #2: Convertir CANTIDAD a numérico
                     if "CANTIDAD" in df_req_folio.columns:
                         df_req_folio["CANTIDAD"] = pd.to_numeric(
                             df_req_folio["CANTIDAD"], errors="coerce"
@@ -1483,13 +1449,9 @@ elif vista == "📥 Recepción":
 
                     st.session_state["req_recepcion_df"] = df_req_folio
                     st.session_state["req_recepcion_id"] = id_req_input.strip()
-
-                    # ✅ FIX #3: Incrementar versión del editor para forzar recreación
                     st.session_state["editor_version"] += 1
 
                     st.success("Requerimiento cargado correctamente.")
-
-                    # ✅ FIX #5: Forzar rerun para evitar race conditions
                     st.rerun()
 
             except Exception as e:
@@ -1502,7 +1464,6 @@ elif vista == "📥 Recepción":
     df_req_folio = st.session_state.get("req_recepcion_df", None)
     id_req_actual = st.session_state.get("req_recepcion_id", "")
 
-    # ---------- 2) Mostrar detalle del requerimiento ----------
     if df_req_folio is not None and not df_req_folio.empty:
         st.markdown("### 🧾 Productos del requerimiento")
 
@@ -1525,7 +1486,6 @@ elif vista == "📥 Recepción":
             hide_index=True,
         )
 
-        # ---------- 3) Tabla editable: recepción por insumo (CON SOPORTE PARCIAL) ----------
         st.markdown("### 📦 Registro de recepción por insumo")
 
         if "INSUMO" not in df_req_folio.columns or "CANTIDAD" not in df_req_folio.columns:
@@ -1534,10 +1494,8 @@ elif vista == "📥 Recepción":
                 "para construir la tabla de recepción."
             )
         else:
-            # ✅ NUEVO: Calcular pendientes considerando recepciones previas
             pendientes_df = calcular_pendientes_por_producto(id_req_actual, df_req_folio)
 
-            # Mostrar resumen de estado
             total_po = pendientes_df["CANTIDAD PO"].sum()
             total_recibido = pendientes_df["CANTIDAD RECIBIDA TOTAL"].sum()
             total_pendiente = pendientes_df["CANTIDAD PENDIENTE"].sum()
@@ -1547,11 +1505,9 @@ elif vista == "📥 Recepción":
             col_res2.metric("✅ Ya Recibido", f"{total_recibido:.0f}")
             col_res3.metric("⏳ Pendiente", f"{total_pendiente:.0f}")
 
-            # ✅ NUEVO: Mostrar historial de recepciones previas
             historial_df = obtener_historial_recepciones(id_req_actual)
             if not historial_df.empty:
                 with st.expander("📋 Ver historial de recepciones anteriores", expanded=False):
-                    # Columnas adaptadas a la hoja de Requerimientos
                     cols_hist = [c for c in [
                         "Folio Generado de Recepcion", "Fecha de recepción app", "INSUMO",
                         "CANTIDAD RECIBIDA", "CANTIDAD PENDIENTE", "Estatus Recepción",
@@ -1567,7 +1523,6 @@ elif vista == "📥 Recepción":
                     else:
                         st.dataframe(historial_df.reset_index(drop=True), use_container_width=True)
 
-            # ✅ NUEVO: Opción para ver solo pendientes o todos
             mostrar_opcion = st.radio(
                 "¿Qué productos mostrar?",
                 options=["Solo pendientes", "Todos los productos"],
@@ -1583,7 +1538,6 @@ elif vista == "📥 Recepción":
             else:
                 base_df = pendientes_df.copy()
 
-            # Preparar campos editables
             base_df["Fecha de recepción"] = date.today()
             base_df["FACTURA / TICKET"] = ""
             base_df["RECIBIÓ"] = ""
@@ -1593,10 +1547,8 @@ elif vista == "📥 Recepción":
             base_df["OBSERVACIONES"] = ""
             base_df["fecha de caducidad"] = pd.NaT
 
-            # Key único con versión para forzar recreación
             editor_key = f"editor_recepcion_{id_req_actual}_{st.session_state.get('editor_version', 0)}"
 
-            # Editor con columnas mejoradas
             edited_df = st.data_editor(
                 base_df,
                 column_config={
@@ -1680,34 +1632,6 @@ elif vista == "📥 Recepción":
                 "> Puedes hacer recepciones parciales y volver después a completar el resto."
             )
 
-            # ✅ NUEVO: Mostrar resumen de lo que se va a enviar
-            if edited_df is not None:
-                df_a_enviar = edited_df[edited_df["CANTIDAD A RECIBIR"] > 0].copy()
-
-                # Validar observaciones en rechazos y cantidades
-                if not df_a_enviar.empty:
-                    eps = 1e-6  # tolerancia para errores flotantes
-
-                    for _, row in df_a_enviar.iterrows():
-                        calidad = str(row.get("CALIDAD (OK / RECHAZO)", "OK") or "OK")
-                        obs = str(row.get("OBSERVACIONES", "") or "").strip()
-
-                        cant_recibir = float(row.get("CANTIDAD A RECIBIR", 0) or 0)
-                        cant_pendiente = float(row.get("CANTIDAD PENDIENTE", 0) or 0)
-
-                        if calidad == "RECHAZO" and obs == "":
-                            errores.append(
-                                f"El producto '{row.get('INSUMO', '')}' tiene RECHAZO pero no hay observaciones."
-                            )
-
-                        # ✅ Comparación robusta (NO falla por decimales)
-                        if cant_recibir > cant_pendiente + eps:
-                            errores.append(
-                                f"El producto '{row.get('INSUMO', '')}' tiene cantidad a recibir ({cant_recibir:.2f}) "
-                                f"mayor que la pendiente ({cant_pendiente:.2f})."
-                            )
-
-            # ---------- 4) Botón para registrar recepción ----------
             col_btn1, col_btn2 = st.columns(2)
             btn_limpiar = col_btn1.button("🧹 Limpiar tabla de recepción")
             btn_enviar_recep = col_btn2.button("✅ Registrar recepción parcial")
@@ -1730,7 +1654,6 @@ elif vista == "📥 Recepción":
                         "La tabla de recepción está vacía. Verifica el requerimiento."
                     )
 
-                # ✅ NUEVO: Filtrar solo productos con cantidad > 0
                 df_a_enviar = edited_df[
                     edited_df["CANTIDAD A RECIBIR"] > 0].copy() if edited_df is not None else pd.DataFrame()
 
@@ -1740,8 +1663,9 @@ elif vista == "📥 Recepción":
                         "Captura al menos un producto para enviar."
                     )
 
-                # Validar observaciones en rechazos y cantidades
                 if not df_a_enviar.empty:
+                    eps = 1e-6
+
                     for _, row in df_a_enviar.iterrows():
                         calidad = str(row.get("CALIDAD (OK / RECHAZO)", "OK") or "OK")
                         obs = str(row.get("OBSERVACIONES", "") or "").strip()
@@ -1752,17 +1676,16 @@ elif vista == "📥 Recepción":
                                 "pero no hay observaciones."
                             )
 
-                        # Validar que no exceda pendiente
-                        cant_recibir_r = round(cant_recibir, 2)
-                        cant_pendiente_r = round(cant_pendiente, 2)
+                        cant_recibir = float(row.get("CANTIDAD A RECIBIR", 0) or 0)
+                        cant_pendiente = float(row.get("CANTIDAD PENDIENTE", 0) or 0)
 
-                        if cant_recibir_r > cant_pendiente_r:
-                            errores.append(
-                                f"El producto '{row.get('INSUMO', '')}' tiene cantidad a recibir ({cant_recibir_r:.2f}) "
-                                f"mayor que la pendiente ({cant_pendiente_r:.2f})."
+                        # ✅ PERMITIR recibir más de lo pendiente (común en operaciones)
+                        # Solo mostrar advertencia, no error
+                        if cant_recibir > cant_pendiente + eps:
+                            st.warning(
+                                f"⚠️ El producto '{row.get('INSUMO', '')}' tiene cantidad a recibir ({cant_recibir:.2f}) "
+                                f"mayor que la pendiente ({cant_pendiente:.2f}). Se registrará el excedente."
                             )
-
-
 
                 if errores:
                     st.error("No se pudo registrar la recepción:")
@@ -1781,14 +1704,12 @@ elif vista == "📥 Recepción":
                         cant_rec = float(row.get("CANTIDAD A RECIBIR", 0) or 0)
                         obs = str(row.get("OBSERVACIONES", "") or "")
 
-                        # Fecha de recepción
                         fecha_linea = row.get("Fecha de recepción", date.today())
                         if hasattr(fecha_linea, "isoformat"):
                             fecha_str = fecha_linea.isoformat()
                         else:
                             fecha_str = str(fecha_linea)
 
-                        # Fecha de caducidad
                         fecha_cad = row.get("fecha de caducidad", None)
                         if isinstance(fecha_cad, (list, tuple)):
                             fecha_cad = fecha_cad[0] if fecha_cad else None
@@ -1824,26 +1745,21 @@ elif vista == "📥 Recepción":
                     if lista_recepcion_data:
                         enviar_recepcion_a_gsheet(lista_recepcion_data)
 
-                        # Limpiar para mostrar datos actualizados
                         st.session_state["editor_version"] += 1
                         st.success(
                             f"✅ Se registraron {len(lista_recepcion_data)} producto(s). "
                             "Recargando datos actualizados..."
                         )
 
-                        # Dar tiempo para que Google Sheets procese
                         import time
-
                         time.sleep(1.5)
                         st.rerun()
-
 
     else:
         st.info(
             "Busca primero un folio de requerimiento (ID_REQ) para poder registrar la recepción."
         )
 
-    # ---------- 5) Consulta de pendientes por requerimiento ----------
     st.markdown("---")
     st.markdown("### 🔍 Consulta de pendientes por requerimiento")
 
@@ -1868,7 +1784,6 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                # Filtrar por folio
                 req_folio = req_df[
                     req_df["ID_REQ"].astype(str).str.strip() == id_req_pend.strip()
                     ].copy()
@@ -1879,7 +1794,6 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                # Columna de producto
                 if "INSUMO" in req_folio.columns:
                     col_prod_req = "INSUMO"
                 elif "PRODUCTO" in req_folio.columns:
@@ -1891,7 +1805,6 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                # Localizar columna 'CANTIDAD PENDIENTE'
                 col_cant_pend = None
                 for c in req_folio.columns:
                     if norm(c) == "cantidadpendiente":
@@ -1906,12 +1819,10 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                # A número
                 req_folio[col_cant_pend] = pd.to_numeric(
                     req_folio[col_cant_pend], errors="coerce"
                 ).fillna(0.0)
 
-                # Solo filas con pendiente > 0
                 req_pend = req_folio[req_folio[col_cant_pend] > 0].copy()
 
                 if req_pend.empty:
@@ -1920,7 +1831,6 @@ elif vista == "📥 Recepción":
                     )
                     st.stop()
 
-                # Versión simple: filas con pendiente > 0
                 cols_base = [col_prod_req, col_cant_pend]
                 if "SKU" in req_pend.columns:
                     cols_base.insert(1, "SKU")
