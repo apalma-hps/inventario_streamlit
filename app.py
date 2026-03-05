@@ -1078,6 +1078,8 @@ elif vista == "📦 Requerimientos de producto":
             "Waldos & Crispier",
             "Eventos",
             "Hole Out",
+            "Oficina",
+            "Pruebas",
         ]
         ceco_destino = col1.selectbox("CECO Destino", opciones_ceco)
 
