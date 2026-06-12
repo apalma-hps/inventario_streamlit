@@ -1230,7 +1230,7 @@ elif vista == "📦 Requerimientos de producto":
             hoy = datetime.now(tz).date()
             diferencia_dias = (fecha_requerida - hoy).days
 
-            if ceco_destino != "Flautas Lamartine":
+            if ceco_destino not in ["Flautas Lamartine", "Eventos"]:
                 if diferencia_dias < 4:
                     st.warning(
                         "NO ES POSIBLE GENERAR PEDIDOS CON UN TIEMPO MENOR A 4 DÍAS "
